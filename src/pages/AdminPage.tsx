@@ -11,6 +11,7 @@ import {
   saveAdminRuntimeConfig,
   saveSharedAdminRuntimeConfig,
 } from '@/services/adminConfigRepository';
+import { defaultPublicTimingSettings, loadPublicTimingSettings, savePublicTimingSettings, type PublicTimingSettings } from '@/services/publicTimingRepository';
 import { fetchRouterModels, testRouterCompletion, type RouterModelInfo } from '@/services/adminValidationService';
 import { transcribeRoundAudio } from '@/services/transcriptionService';
 import { useRoundRecorder } from '@/hooks/useRoundRecorder';
@@ -43,6 +44,8 @@ export default function AdminPage() {
   const [captainTestState, setCaptainTestState] = useState<TestState>(idleTestState);
   const [crewTestState, setCrewTestState] = useState<TestState>(idleTestState);
 
+  const [timing, setTiming] = useState<PublicTimingSettings>(defaultPublicTimingSettings);
+
   const [roomsStatus, setRoomsStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   const [roomsMessage, setRoomsMessage] = useState('');
   const [rooms, setRooms] = useState<Array<{ id: string; hostId?: string; captainId?: string | null; crewId?: string | null; status?: string; updatedAt?: any; createdAt?: any }>>([]);
@@ -52,6 +55,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     setConfig(loadAdminRuntimeConfig());
+    void loadPublicTimingSettings().then(setTiming).catch(() => setTiming(defaultPublicTimingSettings));
   }, []);
 
   useEffect(() => {
@@ -115,10 +119,11 @@ export default function AdminPage() {
       setCloudMessage('Saving shared config…');
       saveAdminRuntimeConfig(config);
       const savedConfig = await saveSharedAdminRuntimeConfig(config);
+      await savePublicTimingSettings(timing);
       setConfig(savedConfig);
       setSaved(true);
       setCloudStatus('saved');
-      setCloudMessage('Shared config and public theme saved.');
+      setCloudMessage('Shared config, public theme, and timing saved.');
       window.setTimeout(() => setSaved(false), 1500);
     } catch (error: any) {
       saveAdminRuntimeConfig(config);
@@ -233,6 +238,32 @@ export default function AdminPage() {
           <span className="soft-label">Router9</span>
           <StatusBadge label={routerReady ? 'ready' : 'not ready'} status={routerReady ? 'ready' : 'not-ready'} />
         </article>
+      </section>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">Settings · Timing</h2>
+        </div>
+
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>Crew response timeout (seconds)</span>
+            <input
+              type="number"
+              min={3}
+              max={60}
+              value={Math.round((timing.crewResponseTimeoutMs || 15000) / 1000)}
+              onChange={(e) => {
+                const seconds = Math.max(3, Math.min(60, Number(e.target.value) || 15));
+                setTiming({ crewResponseTimeoutMs: Math.floor(seconds * 1000) });
+              }}
+            />
+          </label>
+          <div className="field-stack">
+            <span>Notes</span>
+            <p className="admin-message">After Captain stops, Crew must start before this countdown reaches 0, otherwise Crew is game over and Captain wins.</p>
+          </div>
+        </div>
       </section>
 
       <section className="soft-card admin-section-minimal">

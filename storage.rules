@@ -1,8 +1,27 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /rounds/{roundId}/{fileName} {
-      allow read, write: if true;
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function roomDoc(roomId) {
+      return firestore.get(/databases/(default)/documents/rooms/$(roomId)).data;
+    }
+
+    function isParticipant(roomId) {
+      let room = roomDoc(roomId);
+      return isSignedIn() && (
+        room.hostId == request.auth.uid ||
+        room.captainId == request.auth.uid ||
+        room.crewId == request.auth.uid
+      );
+    }
+
+    // Round audio: rooms/{roomId}/rounds/{roundId}/{fileName}
+    match /rooms/{roomId}/rounds/{roundId}/{fileName} {
+      allow read: if isParticipant(roomId);
+      allow write: if isParticipant(roomId);
     }
 
     match /{allPaths=**} {

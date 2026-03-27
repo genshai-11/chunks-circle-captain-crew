@@ -88,11 +88,13 @@ service cloud.firestore {
       }
     }
 
-    // Keep THC collections (optional)
+    // Public game settings (theme, timing, etc.)
     match /game_settings/{docId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdminEmail();
     }
 
+    // Legacy THC collection (optional). Keep open for now.
     match /rounds/{docId} {
       allow read, write: if true;
     }

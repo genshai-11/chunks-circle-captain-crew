@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { RequirePlayer, usePlayerAuth } from '@/auth/PlayerAuth';
 import { RolePanel } from '@/components/RolePanel';
 import { ResultCard } from '@/components/ResultCard';
+import { SummaryVoiceCard } from '@/components/SummaryVoiceCard';
 import { db } from '@/lib/firebase';
 import { useRoom } from '@/rooms/useRoom';
 import { useRoomGame } from '@/rooms/useRoomGame';
@@ -28,6 +29,31 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
 
   const currentRound = game.currentRound;
   const evaluation = currentRound?.meaningAnalysis || null;
+
+  const [captainAudioUrl, setCaptainAudioUrl] = useState<string | null>(null);
+  const [crewAudioUrl, setCrewAudioUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const blob = game.captainRecorder.audioBlob;
+    if (!blob) {
+      setCaptainAudioUrl(null);
+      return undefined;
+    }
+    const url = URL.createObjectURL(blob);
+    setCaptainAudioUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [game.captainRecorder.audioBlob]);
+
+  useEffect(() => {
+    const blob = game.crewRecorder.audioBlob;
+    if (!blob) {
+      setCrewAudioUrl(null);
+      return undefined;
+    }
+    const url = URL.createObjectURL(blob);
+    setCrewAudioUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [game.crewRecorder.audioBlob]);
 
   const canJoinAsCaptain = useMemo(() => !!room && !room.captainId && room.crewId !== userId, [room, userId]);
   const canJoinAsCrew = useMemo(() => !!room && !room.crewId && room.captainId !== userId, [room, userId]);
@@ -107,6 +133,27 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
         <>
           {!currentRound || currentRound.status === 'finished' ? (
             <section className="soft-card admin-section-minimal">
+              {currentRound?.status === 'finished' && (
+                <section className="summary-two-up" style={{ marginTop: 12 }}>
+                  <SummaryVoiceCard
+                    title="Component 1"
+                    subtitle="Captain · Vietnamese input"
+                    transcript={currentRound?.captainTranscript || null}
+                    transcriptMeta={currentRound?.captainTranscriptMeta || null}
+                    audioUrl={captainAudioUrl}
+                    audioFallbackMessage="Audio replay is available on the recording device. (To share across devices, enable Firebase Storage.)"
+                  />
+                  <SummaryVoiceCard
+                    title="Component 2"
+                    subtitle="Crew · English response"
+                    transcript={currentRound?.crewTranscript || null}
+                    transcriptMeta={currentRound?.crewTranscriptMeta || null}
+                    audioUrl={crewAudioUrl}
+                    audioFallbackMessage="Audio replay is available on the recording device. (To share across devices, enable Firebase Storage.)"
+                  />
+                </section>
+              )}
+
               {evaluation && (
                 <ResultCard evaluation={evaluation} reactionDelayMs={currentRound?.reactionDelayMs || null} onReset={() => void startNewRound()} />
               )}

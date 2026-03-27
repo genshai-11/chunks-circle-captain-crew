@@ -1,70 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ResultCard } from '@/components/ResultCard';
-import { SummaryLocationState, TranscriptResult } from '@/types';
-
-function formatConfidence(confidence?: number) {
-  if (typeof confidence !== 'number' || Number.isNaN(confidence) || confidence <= 0) return '—';
-  return `${Math.round(confidence * 100)}%`;
-}
-
-function formatDuration(duration?: number) {
-  if (typeof duration !== 'number' || Number.isNaN(duration) || duration <= 0) return '—';
-  return `${duration.toFixed(1)}s`;
-}
-
-function getTranscriptPlaceholder(transcript?: TranscriptResult | null) {
-  if (!transcript) return 'No transcript captured.';
-  if (transcript.transcript?.trim()) return transcript.transcript;
-  return 'Audio was saved, but no speech was recognized.';
-}
-
-function SummaryVoiceCard({
-  title,
-  subtitle,
-  transcript,
-  audioUrl,
-}: {
-  title: string;
-  subtitle: string;
-  transcript?: TranscriptResult | null;
-  audioUrl: string | null;
-}) {
-  return (
-    <section className="soft-card admin-section-minimal summary-voice-card">
-      <div className="summary-voice-header">
-        <div>
-          <p className="page-kicker summary-voice-kicker">{title}</p>
-          <h2 className="section-title">{subtitle}</h2>
-        </div>
-        <div className="analysis-metrics summary-inline-metrics">
-          <div>
-            <span className="metric-label">confidence</span>
-            <span className="metric-value">{formatConfidence(transcript?.confidence)}</span>
-          </div>
-          <div>
-            <span className="metric-label">duration</span>
-            <span className="metric-value">{formatDuration(transcript?.duration)}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="summary-audio-block">
-        <span className="metric-label">saved audio</span>
-        {audioUrl ? (
-          <audio controls preload="metadata" className="summary-audio-player" src={audioUrl} />
-        ) : (
-          <p className="admin-message">No saved audio available for this role.</p>
-        )}
-      </div>
-
-      <div className="summary-transcript-block">
-        <span className="metric-label">transcript</span>
-        <p className="admin-transcript-preview summary-transcript-text">{getTranscriptPlaceholder(transcript)}</p>
-      </div>
-    </section>
-  );
-}
+import { SummaryVoiceCard } from '@/components/SummaryVoiceCard';
+import { SummaryLocationState } from '@/types';
 
 export default function AnalysisSummaryPage() {
   const location = useLocation();
@@ -137,13 +75,15 @@ export default function AnalysisSummaryPage() {
           <SummaryVoiceCard
             title="Component 1"
             subtitle="Captain · Vietnamese input"
-            transcript={summary?.captainTranscript}
+            transcript={summary?.captainTranscript?.transcript || null}
+            transcriptMeta={summary?.captainTranscript || null}
             audioUrl={captainAudioUrl}
           />
           <SummaryVoiceCard
             title="Component 2"
             subtitle="Crew · English response"
-            transcript={summary?.crewTranscript}
+            transcript={summary?.crewTranscript?.transcript || null}
+            transcriptMeta={summary?.crewTranscript || null}
             audioUrl={crewAudioUrl}
           />
         </section>

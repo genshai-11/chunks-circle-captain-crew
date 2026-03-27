@@ -5,6 +5,7 @@ import { evaluateCaptionCrewMeaning } from '@/services/meaningService';
 import { transcribeRoundAudio } from '@/services/transcriptionService';
 import { useRoundRecorder } from '@/hooks/useRoundRecorder';
 import { createRoomWithJoinCode } from './roomService';
+import { usePublicTiming } from '@/hooks/usePublicTiming';
 import type { RoomDoc, RoomRoundDoc } from './types';
 
 async function waitForCaptainTranscript(params: {
@@ -30,7 +31,6 @@ async function waitForCaptainTranscript(params: {
   return '';
 }
 
-const CREW_RESPONSE_TIMEOUT_MS = 15000;
 
 export function useRoomGame(params: {
   roomId: string;
@@ -39,6 +39,9 @@ export function useRoomGame(params: {
 }) {
   const { roomId, room, rounds } = params;
   const user = auth?.currentUser || null;
+
+  const timing = usePublicTiming();
+  const crewResponseTimeoutMs = timing.crewResponseTimeoutMs;
 
   const captainRecorder = useRoundRecorder();
   const crewRecorder = useRoundRecorder();
@@ -57,9 +60,9 @@ export function useRoomGame(params: {
   const crewDeadlineAtMs = useMemo(() => {
     if (!currentRound) return null;
     if (typeof currentRound.crewDeadlineAtMs === 'number') return currentRound.crewDeadlineAtMs;
-    if (typeof currentRound.captainStoppedAtMs === 'number') return currentRound.captainStoppedAtMs + CREW_RESPONSE_TIMEOUT_MS;
+    if (typeof currentRound.captainStoppedAtMs === 'number') return currentRound.captainStoppedAtMs + crewResponseTimeoutMs;
     return null;
-  }, [currentRound]);
+  }, [currentRound, crewResponseTimeoutMs]);
 
   const crewRemainingMs = useMemo(() => {
     if (!crewDeadlineAtMs) return null;
@@ -169,7 +172,7 @@ export function useRoomGame(params: {
     await updateDoc(roundRef, {
       status: 'crew_speaking',
       captainStoppedAtMs: stoppedAtMs,
-      crewDeadlineAtMs: stoppedAtMs + CREW_RESPONSE_TIMEOUT_MS,
+      crewDeadlineAtMs: stoppedAtMs + crewResponseTimeoutMs,
     });
 
     // Background STT
