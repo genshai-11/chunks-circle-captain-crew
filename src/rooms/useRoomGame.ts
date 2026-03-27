@@ -1,12 +1,46 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addDoc, collection, doc, getDoc, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { ref as storageRef, uploadBytes } from 'firebase/storage';
+import { auth, db, storage } from '@/lib/firebase';
 import { evaluateCaptionCrewMeaning } from '@/services/meaningService';
 import { transcribeRoundAudio } from '@/services/transcriptionService';
 import { useRoundRecorder } from '@/hooks/useRoundRecorder';
 import { createRoomWithJoinCode } from './roomService';
 import { usePublicTiming } from '@/hooks/usePublicTiming';
 import type { RoomDoc, RoomRoundDoc } from './types';
+
+function extensionForMime(mime: string) {
+  const m = String(mime || '').toLowerCase();
+  if (m.includes('audio/mp4')) return 'mp4';
+  if (m.includes('audio/ogg')) return 'ogg';
+  if (m.includes('audio/webm')) return 'webm';
+  return 'webm';
+}
+
+async function uploadRoundAudio(params: {
+  roomId: string;
+  roundId: string;
+  role: 'captain' | 'crew';
+  blob: Blob;
+}) {
+  const { roomId, roundId, role, blob } = params;
+  if (!storage) throw new Error('Storage not configured');
+  if (!db) throw new Error('Firestore not configured');
+
+  const mimeType = blob.type || 'audio/webm';
+  const ext = extensionForMime(mimeType);
+  const path = `rooms/${roomId}/rounds/${roundId}/${role}.${ext}`;
+  const ref = storageRef(storage, path);
+
+  await uploadBytes(ref, blob, { contentType: mimeType });
+
+  const roundRef = doc(db, 'rooms', roomId, 'rounds', roundId);
+  await updateDoc(roundRef, {
+    ...(role === 'captain' ? { captainAudioPath: path, captainAudioMimeType: mimeType } : { crewAudioPath: path, crewAudioMimeType: mimeType }),
+  });
+
+  return { path, mimeType };
+}
 
 async function waitForCaptainTranscript(params: {
   roomId: string;
@@ -188,6 +222,15 @@ export function useRoomGame(params: {
       }
     })();
 
+    // Background audio upload (for cross-device replay)
+    void (async () => {
+      try {
+        await uploadRoundAudio({ roomId, roundId: currentRound.id, role: 'captain', blob });
+      } catch {
+        // ignore upload errors; transcript/results still work
+      }
+    })();
+
     setProcessing(false);
   }, [captainRecorder, currentRound, roomId]);
 
@@ -217,6 +260,15 @@ export function useRoomGame(params: {
     await updateDoc(roundRef, {
       status: 'evaluating',
     });
+
+    // Background audio upload (for cross-device replay)
+    void (async () => {
+      try {
+        await uploadRoundAudio({ roomId, roundId: currentRound.id, role: 'crew', blob });
+      } catch {
+        // ignore upload errors; transcript/results still work
+      }
+    })();
 
     try {
       const crewResult = await transcribeRoundAudio(blob, { role: 'crew', language: 'en' });

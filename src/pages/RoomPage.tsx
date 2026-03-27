@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { getBlob, ref as storageRef } from 'firebase/storage';
 import { RequirePlayer, usePlayerAuth } from '@/auth/PlayerAuth';
 import { RolePanel } from '@/components/RolePanel';
 import { ResultCard } from '@/components/ResultCard';
 import { SummaryVoiceCard } from '@/components/SummaryVoiceCard';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
 import { useRoom } from '@/rooms/useRoom';
 import { useRoomGame } from '@/rooms/useRoomGame';
 
@@ -34,26 +35,78 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
   const [crewAudioUrl, setCrewAudioUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    let localUrl: string | null = null;
+
     const blob = game.captainRecorder.audioBlob;
-    if (!blob) {
+    if (blob) {
+      localUrl = URL.createObjectURL(blob);
+      setCaptainAudioUrl(localUrl);
+      return () => {
+        if (localUrl) URL.revokeObjectURL(localUrl);
+      };
+    }
+
+    const audioPath = String((currentRound as any)?.captainAudioPath || '').trim();
+    if (!storage || !audioPath) {
       setCaptainAudioUrl(null);
       return undefined;
     }
-    const url = URL.createObjectURL(blob);
-    setCaptainAudioUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [game.captainRecorder.audioBlob]);
+
+    void (async () => {
+      try {
+        const b = await getBlob(storageRef(storage, audioPath));
+        if (cancelled) return;
+        const url = URL.createObjectURL(b);
+        localUrl = url;
+        setCaptainAudioUrl(url);
+      } catch {
+        if (!cancelled) setCaptainAudioUrl(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (localUrl) URL.revokeObjectURL(localUrl);
+    };
+  }, [game.captainRecorder.audioBlob, currentRound]);
 
   useEffect(() => {
+    let cancelled = false;
+    let localUrl: string | null = null;
+
     const blob = game.crewRecorder.audioBlob;
-    if (!blob) {
+    if (blob) {
+      localUrl = URL.createObjectURL(blob);
+      setCrewAudioUrl(localUrl);
+      return () => {
+        if (localUrl) URL.revokeObjectURL(localUrl);
+      };
+    }
+
+    const audioPath = String((currentRound as any)?.crewAudioPath || '').trim();
+    if (!storage || !audioPath) {
       setCrewAudioUrl(null);
       return undefined;
     }
-    const url = URL.createObjectURL(blob);
-    setCrewAudioUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [game.crewRecorder.audioBlob]);
+
+    void (async () => {
+      try {
+        const b = await getBlob(storageRef(storage, audioPath));
+        if (cancelled) return;
+        const url = URL.createObjectURL(b);
+        localUrl = url;
+        setCrewAudioUrl(url);
+      } catch {
+        if (!cancelled) setCrewAudioUrl(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (localUrl) URL.revokeObjectURL(localUrl);
+    };
+  }, [game.crewRecorder.audioBlob, currentRound]);
 
   const canJoinAsCaptain = useMemo(() => !!room && !room.captainId && room.crewId !== userId, [room, userId]);
   const canJoinAsCrew = useMemo(() => !!room && !room.crewId && room.captainId !== userId, [room, userId]);

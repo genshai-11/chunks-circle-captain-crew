@@ -32,6 +32,11 @@ export interface RoomRoundDoc {
   captainTranscriptMeta?: TranscriptResult;
   crewTranscriptMeta?: TranscriptResult;
 
+  captainAudioPath?: string;
+  crewAudioPath?: string;
+  captainAudioMimeType?: string;
+  crewAudioMimeType?: string;
+
   meaningScore?: number;
   feedback?: string;
   meaningAnalysis?: MeaningEvaluation;
