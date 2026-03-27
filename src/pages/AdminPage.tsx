@@ -119,7 +119,12 @@ export default function AdminPage() {
       setCloudMessage('Saving shared config…');
       saveAdminRuntimeConfig(config);
       const savedConfig = await saveSharedAdminRuntimeConfig(config);
-      await savePublicTimingSettings(timing);
+      try {
+        await savePublicTimingSettings(timing);
+      } catch (timingError: any) {
+        setCloudStatus('error');
+        setCloudMessage(timingError?.message || 'Timing settings could not be saved.');
+      }
       setConfig(savedConfig);
       setSaved(true);
       setCloudStatus('saved');

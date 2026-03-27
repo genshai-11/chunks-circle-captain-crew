@@ -67,6 +67,11 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Per-user private data (rooms mapping, round history)
+    match /users/{uid}/{document=**} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
     match /rooms/{roomId} {
       // Host creates a room.
       allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;

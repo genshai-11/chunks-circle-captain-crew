@@ -1,5 +1,5 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { GameSettings, RoundRecord } from '@/types';
 
 const SETTINGS_KEY = 'caption-crew-settings';
@@ -65,14 +65,16 @@ export async function saveRound(round: RoundRecord) {
   local.unshift(normalized);
   saveLocalHistory(local);
 
-  if (db) {
-    await setDoc(doc(db, 'rounds', normalized.id), normalized, { merge: true });
+  const uid = auth?.currentUser?.uid || null;
+  if (db && uid) {
+    await setDoc(doc(db, 'users', uid, 'history', normalized.id), normalized, { merge: true });
   }
 }
 
 export async function loadRecentRounds(): Promise<RoundRecord[]> {
-  if (db) {
-    const q = query(collection(db, 'rounds'), orderBy('createdAt', 'desc'), limit(20));
+  const uid = auth?.currentUser?.uid || null;
+  if (db && uid) {
+    const q = query(collection(db, 'users', uid, 'history'), orderBy('createdAt', 'desc'), limit(20));
     const snap = await getDocs(q);
     if (!snap.empty) {
       const rounds = snap.docs.map((d) => normalizeRound(d.data() as RoundRecord));

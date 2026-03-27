@@ -6,10 +6,10 @@ export interface PublicTimingSettings {
 }
 
 const TIMING_DOC = ['game_settings', 'timing'] as const;
-const STORAGE_KEY = 'caption-crew-public-timing';
+const STORAGE_KEY = 'caption-crew-public-timing-v2';
 
 export const defaultPublicTimingSettings: PublicTimingSettings = {
-  crewResponseTimeoutMs: 15000,
+  crewResponseTimeoutMs: 3000,
 };
 
 function normalize(raw?: Partial<PublicTimingSettings> | null): PublicTimingSettings {

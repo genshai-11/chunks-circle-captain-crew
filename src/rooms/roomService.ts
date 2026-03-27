@@ -2,6 +2,11 @@ import { collection, doc, getDoc, runTransaction, serverTimestamp } from 'fireba
 import { db } from '@/lib/firebase';
 import type { RoomDoc } from './types';
 
+function userRoomRef(userId: string, roomId: string) {
+  return doc(db!, 'users', userId, 'rooms', roomId);
+}
+
+
 function randomJoinCode(length = 6) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let out = '';
@@ -38,6 +43,15 @@ export async function createRoomWithJoinCode(hostId: string) {
         tx.set(codeRef, {
           roomId: roomRef.id,
           hostId,
+          createdAt: serverTimestamp(),
+        });
+
+        tx.set(userRoomRef(hostId, roomRef.id), {
+          roomId: roomRef.id,
+          joinCode,
+          role: 'host',
+          status: 'waiting',
+          updatedAt: serverTimestamp(),
           createdAt: serverTimestamp(),
         });
       });

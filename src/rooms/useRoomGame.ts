@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, doc, getDoc, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, runTransaction, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from '@/lib/firebase';
 import { evaluateCaptionCrewMeaning } from '@/services/meaningService';
 import { transcribeRoundAudio } from '@/services/transcriptionService';
+import { saveRound } from '@/services/roundRepository';
 import { useRoundRecorder } from '@/hooks/useRoundRecorder';
 import { createRoomWithJoinCode } from './roomService';
 import { usePublicTiming } from '@/hooks/usePublicTiming';
@@ -156,9 +157,50 @@ export function useRoomGame(params: {
         ...(role === 'captain' ? { captainId: user.uid } : { crewId: user.uid }),
         updatedAt: serverTimestamp(),
       });
+
+      // Save per-user room mapping for Lobby listing
+      await setDoc(doc(db, 'users', user.uid, 'rooms', roomId), {
+        roomId,
+        role,
+        updatedAt: serverTimestamp(),
+        createdAt: serverTimestamp(),
+      }, { merge: true });
     },
     [roomId, user?.uid]
   );
+
+  // Persist finished rounds into user history so History page isn't empty.
+  useEffect(() => {
+    const uid = user?.uid;
+    if (!uid) return;
+    if (!currentRound || currentRound.status !== 'finished') return;
+
+    const evaluation = (currentRound as any).meaningAnalysis || null;
+    const endReason = (currentRound as any).endReason || null;
+
+    const fallbackEvaluation = endReason === 'crew_timeout'
+      ? {
+        matchScore: 0,
+        decision: 'timeout',
+        reason: 'Crew did not start in time.',
+      }
+      : null;
+
+    void saveRound({
+      id: `${roomId}-${currentRound.id}`,
+      createdAt: new Date().toISOString(),
+      state: 'results',
+      captainTranscript: (currentRound as any).captainTranscriptMeta,
+      crewTranscript: (currentRound as any).crewTranscriptMeta,
+      evaluation: evaluation || fallbackEvaluation,
+      reactionDelayMs: (currentRound as any).reactionDelayMs ?? null,
+      timeoutLost: endReason === 'crew_timeout' && isCrew,
+      captainAudioPath: (currentRound as any).captainAudioPath,
+      crewAudioPath: (currentRound as any).crewAudioPath,
+      captainAudioMimeType: (currentRound as any).captainAudioMimeType,
+      crewAudioMimeType: (currentRound as any).crewAudioMimeType,
+    } as any);
+  }, [currentRound?.id, currentRound?.status, isCrew, roomId, user?.uid]);
 
   const createRoom = useCallback(async () => {
     if (!user?.uid) throw new Error('Please sign in first');

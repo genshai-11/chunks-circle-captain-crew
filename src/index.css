@@ -257,6 +257,29 @@ input:focus, select:focus {
   font-size: 15px;
   line-height: 1.5;
 }
+
+.role-countdown-big {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(17,24,39,0.04);
+  color: var(--text);
+  font-weight: 700;
+  font-size: clamp(28px, 7vw, 56px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.role-countdown-big span {
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .role-surface-center {
   display: flex;
   flex-direction: column;
@@ -727,3 +750,229 @@ input:focus, select:focus {
   .role-surface { min-height: 28vh; }
   .chunks-brand-block { gap: 12px; }
 }
+
+/* --- SWISS INTERNATIONAL THEME --- */
+.theme-swiss {
+  --bg: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-strong: #FFFFFF;
+  --line: #000000;
+  --text: #000000;
+  --muted: #4A4A4A;
+  --blue: #4f7cff;
+  --blue-soft: rgba(79, 124, 255, 0.14);
+  --red: #ff6b6b;
+  --red-soft: rgba(255, 107, 107, 0.14);
+  --green-soft: rgba(52, 211, 153, 0.18);
+  --shadow: 4px 4px 0px #000000;
+  --radius: 0px;
+  --button-bg: #000000;
+  --button-fg: #FFFFFF;
+  --disc-ring: inset 0 0 0 4px #000000;
+}
+
+body:has(.theme-swiss) {
+  background: #FFFFFF;
+}
+
+.theme-swiss.app-shell {
+  background: #FFFFFF;
+}
+
+.theme-swiss.app-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image: 
+    linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.theme-swiss .page-title,
+.theme-swiss .game-title,
+.theme-swiss .role-name,
+.theme-swiss .analysis-score,
+.theme-swiss .section-title,
+.theme-swiss .metric-value {
+  font-family: 'Inter', sans-serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.05em;
+  color: #000000;
+}
+
+.theme-swiss .game-title,
+.theme-swiss .page-title {
+  font-size: clamp(36px, 6.5vw, 64px);
+  line-height: 0.95;
+}
+
+.theme-swiss .soft-card,
+.theme-swiss .analysis-card,
+.theme-swiss .bottom-nav,
+.theme-swiss .countdown-float,
+.theme-swiss input,
+.theme-swiss select,
+.theme-swiss .game-error {
+  border: 3px solid #000000;
+  border-radius: 0px;
+  box-shadow: 6px 6px 0px #000000;
+  background: #FFFFFF;
+  backdrop-filter: none;
+}
+
+.theme-swiss .role-surface {
+  border: 4px solid #000000;
+  border-radius: 0px;
+  box-shadow: 8px 8px 0px #000000;
+  background: #FFFFFF;
+}
+
+.theme-swiss .role-surface.is-active {
+  transform: translate(-4px, -4px);
+  box-shadow: 12px 12px 0px #000000;
+  border-color: #000000;
+}
+
+.theme-swiss .role-surface.is-recording {
+  background-image: radial-gradient(circle, rgba(0,0,0,0.08) 2px, transparent 2px);
+  background-size: 16px 16px;
+  border-color: #000000;
+}
+
+.theme-swiss .role-surface.is-processing {
+  background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.04) 10px, rgba(0,0,0,0.04) 20px);
+  border-style: solid;
+}
+
+.theme-swiss .role-surface-blue:hover { border-color: var(--blue); }
+.theme-swiss .role-surface-blue .touch-disc {
+  background: var(--blue);
+  color: #FFFFFF;
+  border: 4px solid #000000;
+  box-shadow: 4px 4px 0px #000000;
+}
+
+.theme-swiss .role-surface-red:hover { border-color: var(--red); }
+.theme-swiss .role-surface-red .touch-disc {
+  background: var(--red);
+  color: #FFFFFF;
+  border: 4px solid #000000;
+  box-shadow: 4px 4px 0px #000000;
+}
+
+.theme-swiss .primary-pill-button,
+.theme-swiss .ghost-pill-button {
+  border-radius: 0px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0em;
+  border: 3px solid #000000;
+  box-shadow: 4px 4px 0px #000000;
+  transition: transform 0.1s, box-shadow 0.1s, background 0.1s, color 0.1s;
+}
+
+.theme-swiss .primary-pill-button {
+  background: #000000;
+  color: #FFFFFF;
+}
+
+.theme-swiss .primary-pill-button:hover {
+  background: #FF3000;
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px #000000;
+  border-color: #FF3000;
+}
+
+.theme-swiss .ghost-pill-button {
+  background: #F2F2F2;
+  color: #000000;
+}
+
+.theme-swiss .ghost-pill-button:hover {
+  background: #000000;
+  color: #FFFFFF;
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px #000000;
+}
+
+.theme-swiss .bottom-nav {
+  border: 4px solid #000000;
+  border-radius: 0px;
+  background: #FFFFFF;
+}
+
+.theme-swiss .bottom-nav a {
+  border-radius: 0px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 13px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.theme-swiss .bottom-nav a.active {
+  background: #000000;
+  color: #FFFFFF;
+}
+
+.theme-swiss .bottom-nav a:hover:not(.active) {
+  background: #F2F2F2;
+  color: #FF3000;
+}
+
+.theme-swiss .audio-wave-bar-fill {
+  border-radius: 0px;
+  box-shadow: none;
+}
+.theme-swiss .audio-wave-bar-cap {
+  border-radius: 0px;
+  box-shadow: none;
+  height: 8px;
+}
+
+.theme-swiss input:focus, .theme-swiss select:focus {
+  outline: none;
+  border-color: #FF3000;
+  box-shadow: 4px 4px 0px #FF3000;
+}
+
+.theme-swiss .chunks-logo {
+  border-radius: 0px;
+  border: 4px solid #000000;
+  box-shadow: 6px 6px 0px #000000;
+}
+
+.theme-swiss .analysis-overlay {
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(8px);
+}
+
+.theme-swiss .save-pill,
+.theme-swiss .status-dot,
+.theme-swiss .analysis-pill {
+  border: 2px solid #000000;
+  border-radius: 0px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #FFFFFF;
+  box-shadow: 2px 2px 0px #000000;
+}
+
+.theme-swiss .status-ready, .theme-swiss .status-success, .theme-swiss .decision-match { 
+  background: var(--green-soft); color: #000000; 
+}
+.theme-swiss .status-not-ready, .theme-swiss .status-error, .theme-swiss .decision-mismatch, .theme-swiss .decision-timeout { 
+  background: var(--red-soft); color: #000000; 
+}
+.theme-swiss .pulse-orbit {
+  border-radius: 0px;
+}
+.theme-swiss .pulse-orbit::before,
+.theme-swiss .pulse-orbit::after {
+  border-radius: 0px;
+}
+

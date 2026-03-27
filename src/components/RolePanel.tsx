@@ -46,7 +46,7 @@ export function RolePanel({
         ? 'Wait'
         : 'Tap to start';
 
-  const description = countdownLabel || helperText || (role === 'captain' ? 'Speak in Vietnamese' : 'Speak in English');
+  const description = helperText || (role === 'captain' ? 'Speak in Vietnamese' : 'Speak in English');
 
   return (
     <button
@@ -59,7 +59,14 @@ export function RolePanel({
       <div className="role-surface-inner">
         <div className="role-surface-copy">
           <span className="role-name">{title}</span>
-          <span className="role-hint">{description}</span>
+          {countdownLabel ? (
+            <div className="role-countdown-big">
+              {countdownLabel.replace(/[^0-9]/g, '') || '0'}
+              <span>sec</span>
+            </div>
+          ) : (
+            <span className="role-hint">{description}</span>
+          )}
         </div>
 
         <div className="role-surface-center">

@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { collection, onSnapshot, orderBy, query, limit } from 'firebase/firestore';
 import { usePlayerAuth } from '@/auth/PlayerAuth';
 import { createRoomWithJoinCode, resolveJoinCode } from '@/rooms/roomService';
+import { db } from '@/lib/firebase';
 
 export default function LobbyPage() {
   const navigate = useNavigate();
@@ -9,8 +11,28 @@ export default function LobbyPage() {
 
   const [roomCode, setRoomCode] = useState('');
   const [joinError, setJoinError] = useState('');
+  const [myRooms, setMyRooms] = useState<Array<{ roomId: string; joinCode?: string; role?: string; status?: string; updatedAt?: any }>>([]);
 
   const canUseDb = useMemo(() => Boolean(user?.uid), [user?.uid]);
+
+  useEffect(() => {
+    if (!db || !user?.uid) {
+      setMyRooms([]);
+      return undefined;
+    }
+
+    const q = query(collection(db, 'users', user.uid, 'rooms'), orderBy('updatedAt', 'desc'), limit(12));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const rows = snap.docs.map((d) => d.data() as any).filter(Boolean);
+        setMyRooms(rows);
+      },
+      () => setMyRooms([])
+    );
+
+    return () => unsub();
+  }, [user?.uid]);
 
   const createRoom = async () => {
     if (!user?.uid) return;
@@ -70,6 +92,24 @@ export default function LobbyPage() {
           </div>
           {joinError && <p className="game-error" style={{ marginTop: 8 }}>{joinError}</p>}
         </div>
+
+        {myRooms.length > 0 && (
+          <div className="field-stack" style={{ marginTop: 16 }}>
+            <label>My rooms</label>
+            <div className="action-row">
+              {myRooms.map((r) => (
+                <button
+                  key={r.roomId}
+                  type="button"
+                  className="ghost-pill-button"
+                  onClick={() => navigate(`/room/${r.roomId}`)}
+                >
+                  {(String(r.joinCode || r.roomId.slice(0, 6))).toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="soft-card admin-section-minimal" style={{ marginTop: 16 }}>

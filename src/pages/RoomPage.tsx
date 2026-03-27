@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { getBlob, ref as storageRef } from 'firebase/storage';
 import { RequirePlayer, usePlayerAuth } from '@/auth/PlayerAuth';
+import { useMicrophoneGate } from '@/hooks/useMicrophoneGate';
 import { RolePanel } from '@/components/RolePanel';
 import { ResultCard } from '@/components/ResultCard';
 import { SummaryVoiceCard } from '@/components/SummaryVoiceCard';
@@ -27,6 +28,7 @@ export default function RoomPage() {
 function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string; onLeave: () => void }) {
   const { room, rounds, loading } = useRoom(roomId, userId);
   const game = useRoomGame({ roomId, room, rounds });
+  const mic = useMicrophoneGate();
 
   const currentRound = game.currentRound;
   const evaluation = currentRound?.meaningAnalysis || null;
@@ -181,6 +183,18 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
             <button type="button" className="primary-pill-button" disabled={!canJoinAsCrew} onClick={() => void game.joinRole('crew')}>Crew</button>
           </div>
           <p className="muted-copy" style={{ marginTop: 12 }}>Waiting for both players…</p>
+        </section>
+      ) : !mic.micReady ? (
+        <section className="soft-card admin-section-minimal">
+          <p className="muted-copy">Microphone permission</p>
+          <p className="admin-message">Please enable microphone access before starting the game.</p>
+          {mic.micError && <p className="game-error">{mic.micError}</p>}
+          <div className="action-row">
+            <button type="button" className="primary-pill-button" onClick={() => void mic.requestMic()} disabled={mic.requesting}>
+              {mic.requesting ? 'Requesting…' : 'Enable microphone'}
+            </button>
+            <button type="button" className="ghost-pill-button" onClick={onLeave}>Leave</button>
+          </div>
         </section>
       ) : (
         <>
