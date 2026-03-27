@@ -9,10 +9,6 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email in ['lucy2511kh@gmail.com', 'le.ntmkh@gmail.com'];
     }
 
-    function roomDoc(roomId) {
-      return get(/databases/$(database)/documents/rooms/$(roomId)).data;
-    }
-
     function isParticipant(room) {
       return isSignedIn() && (
         room.hostId == request.auth.uid ||
@@ -21,12 +17,22 @@ service cloud.firestore {
       );
     }
 
-    function willBeParticipant() {
-      return isSignedIn() && (
-        request.resource.data.hostId == request.auth.uid ||
-        request.resource.data.captainId == request.auth.uid ||
-        request.resource.data.crewId == request.auth.uid
-      );
+    function isClaimingCaptain(room) {
+      return room.status == 'waiting'
+        && room.captainId == null
+        && request.resource.data.hostId == room.hostId
+        && request.resource.data.status == room.status
+        && request.resource.data.captainId == request.auth.uid
+        && request.resource.data.crewId == room.crewId;
+    }
+
+    function isClaimingCrew(room) {
+      return room.status == 'waiting'
+        && room.crewId == null
+        && request.resource.data.hostId == room.hostId
+        && request.resource.data.status == room.status
+        && request.resource.data.crewId == request.auth.uid
+        && request.resource.data.captainId == room.captainId;
     }
 
     match /admin_runtime_config/{docId} {
@@ -34,14 +40,24 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId} {
+      // Host creates the room.
       allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
-      allow read: if isParticipant(resource.data);
-      allow update: if isParticipant(resource.data) || willBeParticipant();
+
+      // IMPORTANT:
+      // - Allow opening a *waiting* room by link (GET) so a new player can claim a role.
+      // - Do NOT allow listing all rooms publicly.
+      allow get: if isSignedIn() && (isParticipant(resource.data) || resource.data.status == 'waiting');
+      allow list: if false;
+
+      // Participants can update.
+      // Non-participants can only claim Captain/Crew once while room is waiting.
+      allow update: if isParticipant(resource.data) || (isSignedIn() && (isClaimingCaptain(resource.data) || isClaimingCrew(resource.data)));
+
       allow delete: if false;
 
       match /rounds/{roundId} {
-        allow create: if isParticipant(roomDoc(roomId));
-        allow read, update: if isParticipant(roomDoc(roomId));
+        // Only participants can access rounds.
+        allow create, get, list, update: if isParticipant(get(/databases/$(database)/documents/rooms/$(roomId)).data);
         allow delete: if false;
       }
     }

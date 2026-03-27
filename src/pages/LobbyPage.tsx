@@ -1,42 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { usePlayerAuth } from '@/auth/PlayerAuth';
-
-interface LobbyRoom {
-  id: string;
-  hostId: string;
-  captainId?: string;
-  crewId?: string;
-  status: string;
-  createdAt?: any;
-}
 
 export default function LobbyPage() {
   const navigate = useNavigate();
   const { user, signOutPlayer } = usePlayerAuth();
 
   const [roomCode, setRoomCode] = useState('');
-  const [rooms, setRooms] = useState<LobbyRoom[]>([]);
 
   const canUseDb = useMemo(() => Boolean(db && user?.uid), [user?.uid]);
-
-  useEffect(() => {
-    if (!db || !canUseDb) return;
-
-    const q = query(
-      collection(db, 'rooms'),
-      where('hostId', '==', user!.uid),
-      orderBy('createdAt', 'desc'),
-      limit(12)
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      setRooms(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
-    });
-
-    return () => unsub();
-  }, [canUseDb, user?.uid]);
 
   const createRoom = async () => {
     if (!db || !user?.uid) return;
@@ -91,26 +65,9 @@ export default function LobbyPage() {
       </section>
 
       <section className="soft-card admin-section-minimal" style={{ marginTop: 16 }}>
-        <p className="muted-copy">Recent rooms</p>
-        <ul className="history-grid" style={{ marginTop: 12 }}>
-          {rooms.map((r) => (
-            <li key={r.id} className="history-card">
-              <div className="analysis-topline history-card-topline">
-                <span className="analysis-label">room</span>
-                <span className={`analysis-pill decision-${r.status === 'waiting' ? 'partial' : 'match'}`}>{r.status}</span>
-              </div>
-              <div style={{ marginTop: 10 }}>
-                <div className="metric-label">id</div>
-                <div className="metric-value" style={{ wordBreak: 'break-all' }}>{r.id}</div>
-              </div>
-              <div className="action-row" style={{ marginTop: 12 }}>
-                <button type="button" className="ghost-pill-button" onClick={() => navigate(`/room/${r.id}`)}>
-                  Open
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <p className="muted-copy">
+          Tip: share the room link (or room id) with your partner. We intentionally do not list public rooms.
+        </p>
       </section>
     </main>
   );
