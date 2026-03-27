@@ -12,6 +12,7 @@ import {
   saveSharedAdminRuntimeConfig,
 } from '@/services/adminConfigRepository';
 import { defaultPublicTimingSettings, loadPublicTimingSettings, savePublicTimingSettings, type PublicTimingSettings } from '@/services/publicTimingRepository';
+import { defaultPublicScoringSettings, loadPublicScoringSettings, savePublicScoringSettings, type PublicScoringSettings } from '@/services/publicScoringRepository';
 import { fetchRouterModels, testRouterCompletion, type RouterModelInfo } from '@/services/adminValidationService';
 import { transcribeRoundAudio } from '@/services/transcriptionService';
 import { useRoundRecorder } from '@/hooks/useRoundRecorder';
@@ -45,6 +46,7 @@ export default function AdminPage() {
   const [crewTestState, setCrewTestState] = useState<TestState>(idleTestState);
 
   const [timing, setTiming] = useState<PublicTimingSettings>(defaultPublicTimingSettings);
+  const [scoring, setScoring] = useState<PublicScoringSettings>(defaultPublicScoringSettings);
 
   const [roomsStatus, setRoomsStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   const [roomsMessage, setRoomsMessage] = useState('');
@@ -56,6 +58,7 @@ export default function AdminPage() {
   useEffect(() => {
     setConfig(loadAdminRuntimeConfig());
     void loadPublicTimingSettings().then(setTiming).catch(() => setTiming(defaultPublicTimingSettings));
+    void loadPublicScoringSettings().then(setScoring).catch(() => setScoring(defaultPublicScoringSettings));
   }, []);
 
   useEffect(() => {
@@ -121,14 +124,15 @@ export default function AdminPage() {
       const savedConfig = await saveSharedAdminRuntimeConfig(config);
       try {
         await savePublicTimingSettings(timing);
+        await savePublicScoringSettings(scoring);
       } catch (timingError: any) {
         setCloudStatus('error');
-        setCloudMessage(timingError?.message || 'Timing settings could not be saved.');
+        setCloudMessage(timingError?.message || 'Timing/scoring settings could not be saved.');
       }
       setConfig(savedConfig);
       setSaved(true);
       setCloudStatus('saved');
-      setCloudMessage('Shared config, public theme, and timing saved.');
+      setCloudMessage('Shared config, public theme, timing, and scoring saved.');
       window.setTimeout(() => setSaved(false), 1500);
     } catch (error: any) {
       saveAdminRuntimeConfig(config);
@@ -257,9 +261,9 @@ export default function AdminPage() {
               type="number"
               min={3}
               max={60}
-              value={Math.round((timing.crewResponseTimeoutMs || 15000) / 1000)}
+              value={Math.round((timing.crewResponseTimeoutMs || 3000) / 1000)}
               onChange={(e) => {
-                const seconds = Math.max(3, Math.min(60, Number(e.target.value) || 15));
+                const seconds = Math.max(3, Math.min(60, Number(e.target.value) || 3));
                 setTiming({ crewResponseTimeoutMs: Math.floor(seconds * 1000) });
               }}
             />
@@ -269,6 +273,35 @@ export default function AdminPage() {
             <p className="admin-message">After Captain stops, Crew must start before this countdown reaches 0, otherwise Crew is game over and Captain wins.</p>
           </div>
         </div>
+      </section>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">Settings · Scoring</h2>
+        </div>
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>Crew wins if meaning ≥ (%)</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={scoring.crewWinThreshold}
+              onChange={(e) => setScoring((prev) => ({ ...prev, crewWinThreshold: Number(e.target.value) || 0 }))}
+            />
+          </label>
+          <label className="field-stack">
+            <span>Target points to win</span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={scoring.targetPoints}
+              onChange={(e) => setScoring((prev) => ({ ...prev, targetPoints: Number(e.target.value) || 1 }))}
+            />
+          </label>
+        </div>
+        <p className="admin-message">Each finished round awards 1 point to the winner. When someone reaches target points, room status becomes finished.</p>
       </section>
 
       <section className="soft-card admin-section-minimal">

@@ -157,6 +157,25 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
 
   const showRolePick = !room.captainId || !room.crewId;
 
+  const isCaptain = room.captainId === userId;
+  const isCrew = room.crewId === userId;
+  const myName = isCaptain ? room.captainName : isCrew ? room.crewName : null;
+  const [nickname, setNickname] = useState<string>(String(myName || '').trim());
+
+  useEffect(() => {
+    setNickname(String(myName || '').trim());
+  }, [myName]);
+
+  const saveNickname = async () => {
+    if (!db) return;
+    const name = nickname.trim().slice(0, 40);
+    if (!name) return;
+    await updateDoc(doc(db, 'rooms', roomId), {
+      ...(isCaptain ? { captainName: name } : isCrew ? { crewName: name } : {}),
+      updatedAt: serverTimestamp(),
+    });
+  };
+
   return (
     <main className="game-screen">
       <div className="game-header brand-header">
@@ -175,6 +194,22 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
         </div>
       </div>
 
+      {(room.captainId || room.crewId) && (
+        <section className="soft-card admin-section-minimal" style={{ padding: 16 }}>
+          <div className="action-row" style={{ justifyContent: 'space-between' }}>
+            <div>
+              <span className="soft-label">Captain</span>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>{(room.captainName || '—')}</div>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 800 }}>{Number(room.captainScore || 0)} : {Number(room.crewScore || 0)}</div>
+            <div style={{ textAlign: 'right' }}>
+              <span className="soft-label">Crew</span>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>{(room.crewName || '—')}</div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {showRolePick ? (
         <section className="soft-card admin-section-minimal">
           <p className="muted-copy">Choose your role</p>
@@ -183,6 +218,21 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
             <button type="button" className="primary-pill-button" disabled={!canJoinAsCrew} onClick={() => void game.joinRole('crew')}>Crew</button>
           </div>
           <p className="muted-copy" style={{ marginTop: 12 }}>Waiting for both players…</p>
+        </section>
+      ) : (isCaptain || isCrew) && !String(myName || '').trim() ? (
+        <section className="soft-card admin-section-minimal">
+          <p className="muted-copy">Your nickname</p>
+          <p className="admin-message">Set a short name so your partner can recognize you.</p>
+          <div className="field-stack">
+            <label>Nickname</label>
+            <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="e.g., Genshai" maxLength={40} />
+          </div>
+          <div className="action-row">
+            <button type="button" className="primary-pill-button" onClick={() => void saveNickname()} disabled={!nickname.trim()}>
+              Save nickname
+            </button>
+            <button type="button" className="ghost-pill-button" onClick={onLeave}>Leave</button>
+          </div>
         </section>
       ) : !mic.micReady ? (
         <section className="soft-card admin-section-minimal">

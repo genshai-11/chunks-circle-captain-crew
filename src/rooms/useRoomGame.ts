@@ -8,6 +8,7 @@ import { saveRound } from '@/services/roundRepository';
 import { useRoundRecorder } from '@/hooks/useRoundRecorder';
 import { createRoomWithJoinCode } from './roomService';
 import { usePublicTiming } from '@/hooks/usePublicTiming';
+import { usePublicScoring } from '@/hooks/usePublicScoring';
 import type { RoomDoc, RoomRoundDoc } from './types';
 
 function extensionForMime(mime: string) {
@@ -77,6 +78,10 @@ export function useRoomGame(params: {
 
   const timing = usePublicTiming();
   const crewResponseTimeoutMs = timing.crewResponseTimeoutMs;
+
+  const scoring = usePublicScoring();
+  const crewWinThreshold = scoring.crewWinThreshold;
+  const targetPoints = scoring.targetPoints;
 
   const captainRecorder = useRoundRecorder();
   const crewRecorder = useRoundRecorder();
@@ -177,6 +182,7 @@ export function useRoomGame(params: {
 
     const evaluation = (currentRound as any).meaningAnalysis || null;
     const endReason = (currentRound as any).endReason || null;
+    const winnerRole = (currentRound as any).winnerRole || null;
 
     const fallbackEvaluation = endReason === 'crew_timeout'
       ? {
@@ -186,13 +192,18 @@ export function useRoomGame(params: {
       }
       : null;
 
+    const evalWithWinner = (evaluation || fallbackEvaluation) ? {
+      ...(evaluation || fallbackEvaluation),
+      reason: `${(evaluation || fallbackEvaluation)?.reason || ''}${winnerRole ? ` (winner: ${winnerRole})` : ''}`.trim(),
+    } : null;
+
     void saveRound({
       id: `${roomId}-${currentRound.id}`,
       createdAt: new Date().toISOString(),
       state: 'results',
       captainTranscript: (currentRound as any).captainTranscriptMeta,
       crewTranscript: (currentRound as any).crewTranscriptMeta,
-      evaluation: evaluation || fallbackEvaluation,
+      evaluation: evalWithWinner,
       reactionDelayMs: (currentRound as any).reactionDelayMs ?? null,
       timeoutLost: endReason === 'crew_timeout' && isCrew,
       captainAudioPath: (currentRound as any).captainAudioPath,
@@ -337,12 +348,36 @@ export function useRoomGame(params: {
       const reactionDelayMs =
         captainStoppedAtMs && crewStartedAtMs ? Math.max(0, crewStartedAtMs - captainStoppedAtMs) : undefined;
 
+      const threshold = crewWinThreshold;
+      const winnerRole: 'captain' | 'crew' = evaluation.matchScore >= threshold ? 'crew' : 'captain';
+
       await updateDoc(roundRef, {
         meaningScore: evaluation.matchScore,
         feedback: evaluation.reason,
         meaningAnalysis: evaluation,
         reactionDelayMs: reactionDelayMs ?? null,
+        winnerRole,
+        endReason: 'meaning',
         status: 'finished',
+      });
+
+      // Increment room scoreboard
+      await runTransaction(db, async (tx) => {
+        const roomRef = doc(db, 'rooms', roomId);
+        const snap = await tx.get(roomRef);
+        if (!snap.exists()) return;
+        const data = snap.data() as any;
+        const captainScore = Number(data?.captainScore || 0);
+        const crewScore = Number(data?.crewScore || 0);
+        const nextCaptain = winnerRole === 'captain' ? captainScore + 1 : captainScore;
+        const nextCrew = winnerRole === 'crew' ? crewScore + 1 : crewScore;
+        const nextStatus = (nextCaptain >= targetPoints || nextCrew >= targetPoints) ? 'finished' : data.status;
+        tx.update(roomRef, {
+          captainScore: nextCaptain,
+          crewScore: nextCrew,
+          status: nextStatus,
+          updatedAt: serverTimestamp(),
+        });
       });
     } finally {
       setProcessing(false);

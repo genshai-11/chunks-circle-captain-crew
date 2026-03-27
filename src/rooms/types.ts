@@ -7,6 +7,10 @@ export interface RoomDoc {
   hostId: string;
   captainId?: string | null;
   crewId?: string | null;
+  captainName?: string | null;
+  crewName?: string | null;
+  captainScore?: number;
+  crewScore?: number;
   joinCode?: string;
   status: RoomStatus;
   createdAt: any;
