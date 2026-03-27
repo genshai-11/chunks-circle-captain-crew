@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAdminAuth } from '@/auth/AdminAuthContext';
 import {
   AdminRuntimeConfig,
   defaultAdminRuntimeConfig,
   loadAdminRuntimeConfig,
+  loadSharedAdminRuntimeConfig,
   saveAdminRuntimeConfig,
+  saveSharedAdminRuntimeConfig,
 } from '@/services/adminConfigRepository';
 import { fetchRouterModels, testRouterCompletion, type RouterModelInfo } from '@/services/adminValidationService';
 import { transcribeRoundAudio } from '@/services/transcriptionService';
@@ -20,13 +24,17 @@ const idleTestState: TestState = {
   message: 'Not tested yet.',
 };
 
-function StatusBadge({ label, status }: { label: string; status: TestState['status'] | 'ready' | 'not-ready' }) {
-  return <span className={`decision-pill admin-status admin-status-${status}`}>{label}</span>;
+function StatusBadge({ label, status }: { label: string; status: TestState['status'] | 'ready' | 'not-ready' | 'loading' }) {
+  return <span className={`status-dot status-${status}`}>{label}</span>;
 }
 
 export default function AdminPage() {
+  const navigate = useNavigate();
+  const { user, signOutAdmin } = useAdminAuth();
   const [config, setConfig] = useState<AdminRuntimeConfig>(defaultAdminRuntimeConfig);
   const [saved, setSaved] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<'idle' | 'loading' | 'loaded' | 'saved' | 'error'>('idle');
+  const [cloudMessage, setCloudMessage] = useState('');
   const [routerModels, setRouterModels] = useState<RouterModelInfo[]>([]);
   const [modelsState, setModelsState] = useState<TestState>(idleTestState);
   const [routerTestState, setRouterTestState] = useState<TestState>(idleTestState);
@@ -40,10 +48,48 @@ export default function AdminPage() {
     setConfig(loadAdminRuntimeConfig());
   }, []);
 
-  const handleSave = () => {
-    saveAdminRuntimeConfig(config);
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 1500);
+  useEffect(() => {
+    if (!user?.email) return;
+    let cancelled = false;
+    setCloudStatus('loading');
+    setCloudMessage('Loading shared config…');
+    loadSharedAdminRuntimeConfig()
+      .then((remote) => {
+        if (cancelled) return;
+        setConfig(remote);
+        setCloudStatus('loaded');
+        setCloudMessage('Shared config loaded from cloud.');
+      })
+      .catch((error: any) => {
+        if (cancelled) return;
+        setCloudStatus('error');
+        setCloudMessage(error?.message || 'Could not load shared config. Using local cache.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.email]);
+
+  const patchConfig = <K extends keyof AdminRuntimeConfig>(key: K, value: AdminRuntimeConfig[K]) => {
+    setConfig((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = async () => {
+    try {
+      setCloudStatus('loading');
+      setCloudMessage('Saving shared config…');
+      saveAdminRuntimeConfig(config);
+      const savedConfig = await saveSharedAdminRuntimeConfig(config);
+      setConfig(savedConfig);
+      setSaved(true);
+      setCloudStatus('saved');
+      setCloudMessage('Shared config and public theme saved.');
+      window.setTimeout(() => setSaved(false), 1500);
+    } catch (error: any) {
+      saveAdminRuntimeConfig(config);
+      setCloudStatus('error');
+      setCloudMessage(error?.message || 'Saved locally, but cloud sync failed.');
+    }
   };
 
   const handleFetchModels = async () => {
@@ -79,9 +125,10 @@ export default function AdminPage() {
       const blob = captainRecorder.audioBlob || await captainRecorder.stop();
       if (!blob) throw new Error('No Captain sample audio found. Record Vietnamese first.');
       const result = await transcribeRoundAudio(blob, { role: 'captain', language: 'vi' });
+      const diagnostics = result.fallbackUsed ? ` • fallback ${result.modelUsed}` : ` • ${result.modelUsed || 'primary model'}`;
       setCaptainTestState({
         status: 'success',
-        message: `Vietnamese STT OK • confidence ${(result.confidence || 0).toFixed(2)}`,
+        message: `Vietnamese STT OK • confidence ${(result.confidence || 0).toFixed(2)}${diagnostics}`,
         transcript: result.transcript,
       });
     } catch (error: any) {
@@ -96,9 +143,15 @@ export default function AdminPage() {
       const blob = crewRecorder.audioBlob || await crewRecorder.stop();
       if (!blob) throw new Error('No Crew sample audio found. Record English first.');
       const result = await transcribeRoundAudio(blob, { role: 'crew', language: 'en' });
+      if (result.emptyTranscript) {
+        const fallbackText = result.fallbackUsed ? ` Fallback tried: ${result.modelUsed}.` : '';
+        const echoText = ` Backend received role=${result.roleReceived || 'n/a'}, language=${result.languageReceived || 'n/a'}, contentType=${result.contentTypeReceived || 'n/a'}.`;
+        throw new Error(`Audio was recorded but no English speech was recognized.${fallbackText}${echoText} Request: ${result.requestId || 'n/a'}`);
+      }
+      const diagnostics = result.fallbackUsed ? ` • fallback ${result.modelUsed}` : ` • ${result.modelUsed || 'primary model'}`;
       setCrewTestState({
         status: 'success',
-        message: `English STT OK • confidence ${(result.confidence || 0).toFixed(2)}`,
+        message: `English STT OK • confidence ${(result.confidence || 0).toFixed(2)}${diagnostics}`,
         transcript: result.transcript,
       });
     } catch (error: any) {
@@ -113,173 +166,234 @@ export default function AdminPage() {
   const modelOptions = useMemo(() => routerModels.map((model) => model.id), [routerModels]);
 
   return (
-    <main className="screen-shell settings-shell">
-      <header className="topbar">
+    <main className="screen-shell admin-shell">
+      <header className="page-header">
         <div>
-          <p className="eyebrow">Admin settings</p>
-          <h1>LLM & STT Config</h1>
+          <p className="page-kicker">Admin</p>
+          <h1 className="page-title">STT + meaning setup</h1>
+          {user?.email && <p className="muted-copy">Signed in as {user.email}</p>}
         </div>
-        <StatusBadge label={systemReady ? 'System Ready' : 'Not Ready'} status={systemReady ? 'ready' : 'not-ready'} />
+        <div className="action-row">
+          <StatusBadge label={systemReady ? 'ready' : 'not ready'} status={systemReady ? 'ready' : 'not-ready'} />
+          <button className="ghost-pill-button" onClick={async () => { await signOutAdmin(); navigate('/admin-login', { replace: true }); }}>
+            Sign out
+          </button>
+        </div>
       </header>
 
-      <section className="settings-card">
-        <div className="admin-readiness-grid">
-          <div className="admin-mini-card">
-            <p className="panel-label">Deepgram</p>
-            <StatusBadge label={deepgramReady ? 'Ready' : 'Not Ready'} status={deepgramReady ? 'ready' : 'not-ready'} />
-          </div>
-          <div className="admin-mini-card">
-            <p className="panel-label">Router9</p>
-            <StatusBadge label={routerReady ? 'Ready' : 'Not Ready'} status={routerReady ? 'ready' : 'not-ready'} />
+      <section className="soft-card admin-section-minimal">
+        <div className="action-row">
+          <span className="soft-label">Cloud sync</span>
+          <StatusBadge label={cloudStatus} status={cloudStatus === 'loaded' || cloudStatus === 'saved' ? 'success' : cloudStatus === 'error' ? 'error' : cloudStatus === 'loading' ? 'loading' : 'idle'} />
+        </div>
+        <p className="admin-message">{cloudMessage || 'Shared config will load after admin sign-in.'}</p>
+      </section>
+
+      <section className="admin-grid two-up">
+        <article className="soft-card compact">
+          <span className="soft-label">Deepgram</span>
+          <StatusBadge label={deepgramReady ? 'ready' : 'not ready'} status={deepgramReady ? 'ready' : 'not-ready'} />
+        </article>
+        <article className="soft-card compact">
+          <span className="soft-label">Router9</span>
+          <StatusBadge label={routerReady ? 'ready' : 'not ready'} status={routerReady ? 'ready' : 'not-ready'} />
+        </article>
+      </section>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">Visual style</h2>
+        </div>
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>Shared app theme</span>
+            <select value={config.visualTheme} onChange={(e) => patchConfig('visualTheme', e.target.value as AdminRuntimeConfig['visualTheme'])}>
+              <option value="minimal">Minimal</option>
+              <option value="bold">Bold</option>
+            </select>
+          </label>
+          <div className="field-stack">
+            <span>Theme note</span>
+            <p className="admin-message">This is saved as a public visual setting so all devices see the same gameplay style.</p>
           </div>
         </div>
+      </section>
 
-        <div className="admin-section">
-          <p className="panel-label">Deepgram</p>
-          <label>
-            <span>Deepgram API key</span>
-            <input
-              type="password"
-              value={config.deepgramApiKey}
-              onChange={(e) => setConfig((prev) => ({ ...prev, deepgramApiKey: e.target.value }))}
-            />
-          </label>
-          <label>
-            <span>Captain model (Vietnamese)</span>
-            <input
-              value={config.captainDeepgramModel}
-              onChange={(e) => setConfig((prev) => ({ ...prev, captainDeepgramModel: e.target.value }))}
-            />
-          </label>
-          <label>
-            <span>Crew model (English)</span>
-            <input
-              value={config.crewDeepgramModel}
-              onChange={(e) => setConfig((prev) => ({ ...prev, crewDeepgramModel: e.target.value }))}
-            />
-          </label>
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">Speech to text</h2>
         </div>
 
-        <div className="admin-section">
-          <p className="panel-label">Deepgram validation</p>
+        <label className="field-stack">
+          <span>Deepgram API key</span>
+          <input type="password" value={config.deepgramApiKey} onChange={(e) => patchConfig('deepgramApiKey', e.target.value)} />
+        </label>
 
-          <div className="admin-test-card">
-            <div className="admin-test-header">
-              <strong>Captain Vietnamese STT</strong>
-              <StatusBadge
-                label={captainTestState.status === 'success' ? 'Pass' : captainTestState.status === 'error' ? 'Fail' : 'Pending'}
-                status={captainTestState.status === 'success' ? 'success' : captainTestState.status === 'error' ? 'error' : 'idle'}
-              />
-            </div>
-            <p className="admin-note">Record a short Vietnamese sentence, stop, then test transcription.</p>
-            <div className="admin-actions-row">
-              {!captainRecorder.isRecording ? (
-                <button className="secondary-button" onClick={() => void captainRecorder.start()}>Record Vietnamese</button>
-              ) : (
-                <button className="secondary-button" onClick={() => void captainRecorder.stop()}>Stop Recording</button>
-              )}
-              <button className="big-action-button" onClick={() => void handleCaptainTranscriptionTest()} disabled={captainTestState.status === 'loading'}>
-                {captainTestState.status === 'loading' ? 'Testing...' : 'Test Vietnamese STT'}
-              </button>
-            </div>
-            <p className="admin-test-message">{captainTestState.message}</p>
-            {captainTestState.transcript && <p className="admin-transcript-preview">{captainTestState.transcript}</p>}
-          </div>
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>Captain model</span>
+            <input value={config.captainDeepgramModel} onChange={(e) => patchConfig('captainDeepgramModel', e.target.value)} />
+          </label>
+          <label className="field-stack">
+            <span>Crew model</span>
+            <input value={config.crewDeepgramModel} onChange={(e) => patchConfig('crewDeepgramModel', e.target.value)} />
+          </label>
+        </div>
+      </section>
 
-          <div className="admin-test-card">
-            <div className="admin-test-header">
-              <strong>Crew English STT</strong>
-              <StatusBadge
-                label={crewTestState.status === 'success' ? 'Pass' : crewTestState.status === 'error' ? 'Fail' : 'Pending'}
-                status={crewTestState.status === 'success' ? 'success' : crewTestState.status === 'error' ? 'error' : 'idle'}
-              />
-            </div>
-            <p className="admin-note">Record a short English sentence, stop, then test transcription.</p>
-            <div className="admin-actions-row">
-              {!crewRecorder.isRecording ? (
-                <button className="secondary-button" onClick={() => void crewRecorder.start()}>Record English</button>
-              ) : (
-                <button className="secondary-button" onClick={() => void crewRecorder.stop()}>Stop Recording</button>
-              )}
-              <button className="big-action-button" onClick={() => void handleCrewTranscriptionTest()} disabled={crewTestState.status === 'loading'}>
-                {crewTestState.status === 'loading' ? 'Testing...' : 'Test English STT'}
-              </button>
-            </div>
-            <p className="admin-test-message">{crewTestState.message}</p>
-            {crewTestState.transcript && <p className="admin-transcript-preview">{crewTestState.transcript}</p>}
-          </div>
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">Validation</h2>
         </div>
 
-        <div className="admin-section">
-          <p className="panel-label">Router9</p>
-          <label>
-            <span>Router9 API key</span>
-            <input
-              type="password"
-              value={config.router9ApiKey}
-              onChange={(e) => setConfig((prev) => ({ ...prev, router9ApiKey: e.target.value }))}
-            />
-          </label>
-          <label>
-            <span>Base URL</span>
-            <input
-              value={config.router9BaseUrl}
-              onChange={(e) => setConfig((prev) => ({ ...prev, router9BaseUrl: e.target.value }))}
-            />
-          </label>
-          <div className="admin-actions-row">
-            <button className="secondary-button" onClick={() => void handleFetchModels()} disabled={modelsState.status === 'loading'}>
-              {modelsState.status === 'loading' ? 'Fetching...' : 'Fetch Models'}
-            </button>
-            <StatusBadge
-              label={modelsState.status === 'success' ? 'Models Loaded' : modelsState.status === 'error' ? 'Models Failed' : 'Models Pending'}
-              status={modelsState.status === 'success' ? 'success' : modelsState.status === 'error' ? 'error' : 'idle'}
-            />
+        <div className="admin-test-row">
+          <div>
+            <p className="soft-label">Captain Vietnamese</p>
+            <p className="muted-copy">Record, stop, then test STT.</p>
           </div>
-          <p className="admin-test-message">{modelsState.message}</p>
+          <StatusBadge label={captainTestState.status === 'success' ? 'pass' : captainTestState.status === 'error' ? 'fail' : 'pending'} status={captainTestState.status === 'success' ? 'success' : captainTestState.status === 'error' ? 'error' : 'idle'} />
+        </div>
+        <div className="action-row">
+          {!captainRecorder.isRecording ? (
+            <button className="ghost-pill-button" onClick={() => void captainRecorder.start()}>Record Vietnamese</button>
+          ) : (
+            <button className="ghost-pill-button" onClick={() => void captainRecorder.stop()}>Stop</button>
+          )}
+          <button className="primary-pill-button" onClick={() => void handleCaptainTranscriptionTest()} disabled={captainTestState.status === 'loading'}>
+            {captainTestState.status === 'loading' ? 'Testing…' : 'Test Vietnamese STT'}
+          </button>
+        </div>
+        <p className="admin-message">{captainTestState.message}</p>
+        {captainTestState.transcript && <p className="admin-transcript-preview">{captainTestState.transcript}</p>}
 
-          <label>
+        <div className="admin-divider" />
+
+        <div className="admin-test-row">
+          <div>
+            <p className="soft-label">Crew English</p>
+            <p className="muted-copy">Record, stop, then test STT.</p>
+          </div>
+          <StatusBadge label={crewTestState.status === 'success' ? 'pass' : crewTestState.status === 'error' ? 'fail' : 'pending'} status={crewTestState.status === 'success' ? 'success' : crewTestState.status === 'error' ? 'error' : 'idle'} />
+        </div>
+        <div className="action-row">
+          {!crewRecorder.isRecording ? (
+            <button className="ghost-pill-button" onClick={() => void crewRecorder.start()}>Record English</button>
+          ) : (
+            <button className="ghost-pill-button" onClick={() => void crewRecorder.stop()}>Stop</button>
+          )}
+          <button className="primary-pill-button" onClick={() => void handleCrewTranscriptionTest()} disabled={crewTestState.status === 'loading'}>
+            {crewTestState.status === 'loading' ? 'Testing…' : 'Test English STT'}
+          </button>
+        </div>
+        <p className="admin-message">{crewTestState.message}</p>
+        {crewTestState.transcript && <p className="admin-transcript-preview">{crewTestState.transcript}</p>}
+      </section>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">Router9</h2>
+        </div>
+
+        <label className="field-stack">
+          <span>API key</span>
+          <input type="password" value={config.router9ApiKey} onChange={(e) => patchConfig('router9ApiKey', e.target.value)} />
+        </label>
+        <label className="field-stack">
+          <span>Base URL</span>
+          <input value={config.router9BaseUrl} onChange={(e) => patchConfig('router9BaseUrl', e.target.value)} />
+        </label>
+        <div className="action-row">
+          <button className="ghost-pill-button" onClick={() => void handleFetchModels()} disabled={modelsState.status === 'loading'}>
+            {modelsState.status === 'loading' ? 'Fetching…' : 'Fetch models'}
+          </button>
+          <StatusBadge label={modelsState.status === 'success' ? 'loaded' : modelsState.status === 'error' ? 'failed' : 'pending'} status={modelsState.status === 'success' ? 'success' : modelsState.status === 'error' ? 'error' : 'idle'} />
+        </div>
+        <p className="admin-message">{modelsState.message}</p>
+
+        <div className="admin-grid two-up">
+          <label className="field-stack">
             <span>Primary model</span>
             {modelOptions.length > 0 ? (
-              <select value={config.router9Model} onChange={(e) => setConfig((prev) => ({ ...prev, router9Model: e.target.value }))}>
+              <select value={config.router9Model} onChange={(e) => patchConfig('router9Model', e.target.value)}>
                 <option value="">Select a model</option>
                 {modelOptions.map((modelId) => <option key={modelId} value={modelId}>{modelId}</option>)}
               </select>
             ) : (
-              <input value={config.router9Model} onChange={(e) => setConfig((prev) => ({ ...prev, router9Model: e.target.value }))} />
+              <input value={config.router9Model} onChange={(e) => patchConfig('router9Model', e.target.value)} />
             )}
           </label>
-          <label>
+          <label className="field-stack">
             <span>Fallback model</span>
             {modelOptions.length > 0 ? (
-              <select value={config.router9FallbackModel} onChange={(e) => setConfig((prev) => ({ ...prev, router9FallbackModel: e.target.value }))}>
+              <select value={config.router9FallbackModel} onChange={(e) => patchConfig('router9FallbackModel', e.target.value)}>
                 <option value="">Select a fallback model</option>
                 {modelOptions.map((modelId) => <option key={modelId} value={modelId}>{modelId}</option>)}
               </select>
             ) : (
-              <input value={config.router9FallbackModel} onChange={(e) => setConfig((prev) => ({ ...prev, router9FallbackModel: e.target.value }))} />
+              <input value={config.router9FallbackModel} onChange={(e) => patchConfig('router9FallbackModel', e.target.value)} />
             )}
           </label>
-          <div className="admin-actions-row">
-            <button className="big-action-button" onClick={() => void handleTestRouter()} disabled={routerTestState.status === 'loading'}>
-              {routerTestState.status === 'loading' ? 'Testing...' : 'Test Router9'}
-            </button>
-            <StatusBadge
-              label={routerTestState.status === 'success' ? 'Pass' : routerTestState.status === 'error' ? 'Fail' : 'Pending'}
-              status={routerTestState.status === 'success' ? 'success' : routerTestState.status === 'error' ? 'error' : 'idle'}
-            />
-          </div>
-          <p className="admin-test-message">{routerTestState.message}</p>
         </div>
 
-        <p className="panel-label">Current behavior</p>
-        <p className="admin-note">
-          Save first, then validate each dependency. The game is only truly ready when Vietnamese STT, English STT, and Router9 all pass.
-        </p>
-
-        <button className="big-action-button" onClick={handleSave}>Save admin config</button>
-        {saved && <p className="save-hint">Admin config saved.</p>}
+        <div className="action-row">
+          <button className="primary-pill-button" onClick={() => void handleTestRouter()} disabled={routerTestState.status === 'loading'}>
+            {routerTestState.status === 'loading' ? 'Testing…' : 'Test Router9'}
+          </button>
+          <StatusBadge label={routerTestState.status === 'success' ? 'pass' : routerTestState.status === 'error' ? 'fail' : 'pending'} status={routerTestState.status === 'success' ? 'success' : routerTestState.status === 'error' ? 'error' : 'idle'} />
+        </div>
+        <p className="admin-message">{routerTestState.message}</p>
       </section>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">Meaning match</h2>
+        </div>
+
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>Strictness</span>
+            <select value={config.meaningStrictness} onChange={(e) => patchConfig('meaningStrictness', e.target.value as AdminRuntimeConfig['meaningStrictness'])}>
+              <option value="loose">Loose</option>
+              <option value="medium">Medium</option>
+              <option value="strict">Strict</option>
+            </select>
+          </label>
+          <label className="field-stack">
+            <span>Meaning weight</span>
+            <input type="number" min={0} max={100} value={config.meaningWeight} onChange={(e) => patchConfig('meaningWeight', Number(e.target.value) || 0)} />
+          </label>
+        </div>
+
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>Feedback mode</span>
+            <select value={config.feedbackMode} onChange={(e) => patchConfig('feedbackMode', e.target.value as AdminRuntimeConfig['feedbackMode'])}>
+              <option value="gentle">Gentle</option>
+              <option value="balanced">Balanced</option>
+              <option value="detailed">Detailed</option>
+            </select>
+          </label>
+          <label className="field-stack">
+            <span>Tone</span>
+            <select value={config.feedbackTone} onChange={(e) => patchConfig('feedbackTone', e.target.value as AdminRuntimeConfig['feedbackTone'])}>
+              <option value="encouraging">Encouraging</option>
+              <option value="neutral">Neutral</option>
+              <option value="strict">Strict</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="toggle-row"><input type="checkbox" checked={config.feedbackEnabled} onChange={(e) => patchConfig('feedbackEnabled', e.target.checked)} />Enable feedback</label>
+        <label className="toggle-row"><input type="checkbox" checked={config.showGrammarReminder} onChange={(e) => patchConfig('showGrammarReminder', e.target.checked)} />Show grammar reminder</label>
+        <label className="toggle-row"><input type="checkbox" checked={config.showImprovedSentence} onChange={(e) => patchConfig('showImprovedSentence', e.target.checked)} />Show improved sentence</label>
+        <label className="toggle-row"><input type="checkbox" checked={config.showWhenMeaningCorrect} onChange={(e) => patchConfig('showWhenMeaningCorrect', e.target.checked)} />Show feedback even when meaning is correct</label>
+        <label className="toggle-row"><input type="checkbox" checked={config.onlyIfAffectsClarity} onChange={(e) => patchConfig('onlyIfAffectsClarity', e.target.checked)} />Only show feedback if clarity is affected</label>
+      </section>
+
+      <div className="action-row sticky-save-row">
+        <button className="primary-pill-button" onClick={() => void handleSave()}>Save admin config</button>
+        {saved && <span className="save-pill">Saved</span>}
+      </div>
     </main>
   );
 }

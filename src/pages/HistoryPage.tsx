@@ -1,6 +1,116 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { loadRecentRounds } from '@/services/roundRepository';
 import { RoundRecord } from '@/types';
+
+function DetailList({ title, items }: { title: string; items?: string[] }) {
+  if (!items?.length) return null;
+
+  return (
+    <div className="analysis-detail-block">
+      <span className="metric-label">{title}</span>
+      <ul className="analysis-detail-list">
+        {items.map((item) => (
+          <li key={`${title}-${item}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function HistoryVoiceBlock({
+  title,
+  transcript,
+  audioUrl,
+}: {
+  title: string;
+  transcript?: string;
+  audioUrl?: string;
+}) {
+  return (
+    <div className="summary-transcript-block">
+      <span className="metric-label">{title}</span>
+      {audioUrl ? (
+        <audio controls preload="none" className="summary-audio-player" src={audioUrl} />
+      ) : (
+        <p className="admin-message">No saved audio.</p>
+      )}
+      <p className="admin-transcript-preview summary-transcript-text">{transcript || 'No transcript captured.'}</p>
+    </div>
+  );
+}
+
+function HistoryCard({ round }: { round: RoundRecord }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const createdLabel = useMemo(() => new Date(round.createdAt).toLocaleString(), [round.createdAt]);
+  const shortReason = useMemo(() => {
+    const reason = round.evaluation?.reason || 'No evaluation summary available.';
+    if (reason.length <= 96) return reason;
+    return `${reason.slice(0, 96).trim()}…`;
+  }, [round.evaluation?.reason]);
+
+  return (
+    <article className={`soft-card history-card-minimal ${expanded ? 'is-expanded' : ''}`}>
+      <div className="analysis-topline history-card-topline">
+        <div className="history-topline-copy">
+          <span className="soft-label">{createdLabel}</span>
+          <p className="history-reason-preview">{shortReason}</p>
+        </div>
+        <div className="history-topline-actions">
+          <span className={`analysis-pill decision-${round.evaluation?.decision || 'mismatch'}`}>
+            {round.evaluation?.decision || round.state}
+          </span>
+          <button
+            type="button"
+            className="ghost-pill-button history-expand-button"
+            onClick={() => setExpanded((prev) => !prev)}
+            aria-expanded={expanded}
+          >
+            {expanded ? 'Hide details' : 'View details'}
+          </button>
+        </div>
+      </div>
+
+      <div className="history-metric-row history-metric-row-compact">
+        <div>
+          <span className="metric-label">meaning</span>
+          <span className="metric-value">{round.evaluation?.matchScore ?? 0}</span>
+        </div>
+        <div>
+          <span className="metric-label">delay</span>
+          <span className="metric-value">{round.reactionDelayMs != null ? `${(round.reactionDelayMs / 1000).toFixed(2)}s` : '—'}</span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="history-expanded-block">
+          <div className="history-two-up">
+            <HistoryVoiceBlock
+              title="Captain · Vietnamese"
+              transcript={round.captainTranscript?.transcript}
+              audioUrl={round.captainAudioUrl}
+            />
+            <HistoryVoiceBlock
+              title="Crew · English"
+              transcript={round.crewTranscript?.transcript}
+              audioUrl={round.crewAudioUrl}
+            />
+          </div>
+
+          <div className="analysis-detail-block">
+            <span className="metric-label">llm meaning analysis</span>
+            <p className="analysis-reason">{round.evaluation?.reason || 'No evaluation summary available.'}</p>
+          </div>
+
+          <div className="analysis-grid-two-up">
+            <DetailList title="missing meaning" items={round.evaluation?.missingConcepts} />
+            <DetailList title="extra meaning" items={round.evaluation?.extraConcepts} />
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
 
 export default function HistoryPage() {
   const [rounds, setRounds] = useState<RoundRecord[]>([]);
@@ -10,28 +120,18 @@ export default function HistoryPage() {
   }, []);
 
   return (
-    <main className="screen-shell settings-shell">
-      <header className="topbar">
+    <main className="screen-shell admin-shell">
+      <header className="page-header">
         <div>
-          <p className="eyebrow">History</p>
-          <h1>Recent rounds</h1>
+          <p className="page-kicker">History</p>
+          <h1 className="page-title">Recent rounds</h1>
         </div>
       </header>
 
-      <div className="history-list">
-        {rounds.length === 0 && <p>No rounds yet.</p>}
+      <div className="history-list-minimal">
+        {rounds.length === 0 && <p className="muted-copy">No rounds yet.</p>}
         {rounds.map((round) => (
-          <article key={round.id} className="history-card">
-            <div className="result-header">
-              <strong>{new Date(round.createdAt).toLocaleString()}</strong>
-              <span className={`decision-pill decision-${round.evaluation?.decision || 'mismatch'}`}>
-                {round.evaluation?.decision || round.state}
-              </span>
-            </div>
-            <p><strong>Captain:</strong> {round.captainTranscript?.transcript || '—'}</p>
-            <p><strong>Crew:</strong> {round.crewTranscript?.transcript || '—'}</p>
-            <p><strong>Meaning:</strong> {round.evaluation?.matchScore ?? 0}</p>
-          </article>
+          <HistoryCard key={round.id} round={round} />
         ))}
       </div>
     </main>

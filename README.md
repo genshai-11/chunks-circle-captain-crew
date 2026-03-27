@@ -23,3 +23,7 @@ A new standalone mobile-first speaking game project.
 
 ## Important
 This is a **new project**. It reuses ideas and selected code patterns from Voice Energy Trainer, but it is not coupled to that codebase.
+
+## Product Docs
+- [PRD.md](./PRD.md)
+- [PURPOSE.md](./PURPOSE.md)

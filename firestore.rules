@@ -1,8 +1,62 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdminEmail() {
+      return isSignedIn() && request.auth.token.email in ['lucy2511kh@gmail.com', 'le.ntmkh@gmail.com'];
+    }
+
+    function roomDoc(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data;
+    }
+
+    function isParticipant(room) {
+      return isSignedIn() && (
+        room.hostId == request.auth.uid ||
+        room.captainId == request.auth.uid ||
+        room.crewId == request.auth.uid
+      );
+    }
+
+    function willBeParticipant() {
+      return isSignedIn() && (
+        request.resource.data.hostId == request.auth.uid ||
+        request.resource.data.captainId == request.auth.uid ||
+        request.resource.data.crewId == request.auth.uid
+      );
+    }
+
+    match /admin_runtime_config/{docId} {
+      allow read, write: if isAdminEmail();
+    }
+
+    match /rooms/{roomId} {
+      allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
+      allow read: if isParticipant(resource.data);
+      allow update: if isParticipant(resource.data) || willBeParticipant();
+      allow delete: if false;
+
+      match /rounds/{roundId} {
+        allow create: if isParticipant(roomDoc(roomId));
+        allow read, update: if isParticipant(roomDoc(roomId));
+        allow delete: if false;
+      }
+    }
+
+    // Keep THC collections (optional)
+    match /game_settings/{docId} {
       allow read, write: if true;
+    }
+
+    match /rounds/{docId} {
+      allow read, write: if true;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

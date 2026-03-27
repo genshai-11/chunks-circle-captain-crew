@@ -1,29 +1,37 @@
 import { loadAdminRuntimeConfig } from '@/services/adminConfigRepository';
 import { MeaningEvaluation } from '@/types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const EVALUATE_MEANING_URL = import.meta.env.DEV ? '/api/evaluateCaptionCrewMeaning' : (import.meta.env.VITE_EVALUATE_MEANING_URL || '');
 
 export async function evaluateCaptionCrewMeaning(payload: {
   captainTranscript: string;
   crewTranscript: string;
   strictness: 'loose' | 'medium' | 'strict';
 }) {
-  if (!API_BASE_URL) {
-    throw new Error('VITE_API_BASE_URL is not configured. Point it to your Firebase HTTPS functions base URL.');
+  if (!EVALUATE_MEANING_URL) {
+    throw new Error('VITE_EVALUATE_MEANING_URL is not configured.');
   }
 
   const config = loadAdminRuntimeConfig();
-  const response = await fetch(`${API_BASE_URL}/evaluateCaptionCrewMeaning`, {
+  const response = await fetch(EVALUATE_MEANING_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      ...payload,
-      routerApiKey: config.router9ApiKey,
-      routerBaseUrl: config.router9BaseUrl,
-      model: config.router9Model,
-      fallbackModel: config.router9FallbackModel,
+      captainTranscript: payload.captainTranscript,
+      crewTranscript: payload.crewTranscript,
+      strictness: config.meaningStrictness || payload.strictness,
+      meaningWeight: config.meaningWeight,
+      feedbackConfig: {
+        enabled: config.feedbackEnabled,
+        feedbackMode: config.feedbackMode,
+        tone: config.feedbackTone,
+        showGrammarReminder: config.showGrammarReminder,
+        showImprovedSentence: config.showImprovedSentence,
+        showWhenMeaningCorrect: config.showWhenMeaningCorrect,
+        onlyIfAffectsClarity: config.onlyIfAffectsClarity,
+      },
     }),
   });
 
@@ -38,5 +46,9 @@ export async function evaluateCaptionCrewMeaning(payload: {
     reason: data.reason || 'Evaluation completed.',
     missingConcepts: Array.isArray(data.missingConcepts) ? data.missingConcepts : [],
     extraConcepts: Array.isArray(data.extraConcepts) ? data.extraConcepts : [],
+    grammarNote: typeof data.grammarNote === 'string' ? data.grammarNote : '',
+    improvedTranscript: typeof data.improvedTranscript === 'string' ? data.improvedTranscript : '',
+    grammarSeverity: data.grammarSeverity || 'none',
+    feedbackType: data.feedbackType || 'off',
   } as MeaningEvaluation;
 }

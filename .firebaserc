@@ -1,5 +1,14 @@
 {
   "projects": {
-    "default": "thc-caption-crew-2026"
+    "default": "gen-lang-client-0699706861"
+  },
+  "targets": {
+    "gen-lang-client-0699706861": {
+      "hosting": {
+        "cc-captain-crew": [
+          "cc-captain-crew"
+        ]
+      }
+    }
   }
 }

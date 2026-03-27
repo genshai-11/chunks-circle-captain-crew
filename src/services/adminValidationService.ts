@@ -1,6 +1,7 @@
 import { loadAdminRuntimeConfig } from '@/services/adminConfigRepository';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const FETCH_MODELS_URL = import.meta.env.DEV ? '/api/fetchRouterModels' : (import.meta.env.VITE_FETCH_MODELS_URL || '');
+const TEST_ROUTER_URL = import.meta.env.DEV ? '/api/testRouterCompletion' : (import.meta.env.VITE_TEST_ROUTER_URL || '');
 
 export interface RouterModelInfo {
   id: string;
@@ -10,9 +11,9 @@ export interface RouterModelInfo {
 
 export async function fetchRouterModels() {
   const config = loadAdminRuntimeConfig();
-  if (!API_BASE_URL) throw new Error('VITE_API_BASE_URL is not configured.');
+  if (!FETCH_MODELS_URL) throw new Error('VITE_FETCH_MODELS_URL is not configured.');
 
-  const response = await fetch(`${API_BASE_URL}/fetchRouterModels`, {
+  const response = await fetch(FETCH_MODELS_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -30,9 +31,9 @@ export async function fetchRouterModels() {
 
 export async function testRouterCompletion() {
   const config = loadAdminRuntimeConfig();
-  if (!API_BASE_URL) throw new Error('VITE_API_BASE_URL is not configured.');
+  if (!TEST_ROUTER_URL) throw new Error('VITE_TEST_ROUTER_URL is not configured.');
 
-  const response = await fetch(`${API_BASE_URL}/testRouterCompletion`, {
+  const response = await fetch(TEST_ROUTER_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

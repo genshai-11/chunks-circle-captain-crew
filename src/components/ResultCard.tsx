@@ -1,52 +1,84 @@
-import { MeaningEvaluation, TranscriptResult } from '@/types';
+import { MeaningEvaluation } from '@/types';
 
 interface ResultCardProps {
-  captainTranscript: TranscriptResult | null;
-  crewTranscript: TranscriptResult | null;
   evaluation: MeaningEvaluation | null;
   reactionDelayMs: number | null;
+  onReset: () => void;
 }
 
-export function ResultCard({ captainTranscript, crewTranscript, evaluation, reactionDelayMs }: ResultCardProps) {
-  if (!evaluation && !captainTranscript && !crewTranscript) {
+function DetailList({ title, items }: { title: string; items?: string[] }) {
+  if (!items?.length) return null;
+
+  return (
+    <div className="analysis-detail-block">
+      <span className="metric-label">{title}</span>
+      <ul className="analysis-detail-list">
+        {items.map((item) => (
+          <li key={`${title}-${item}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function ResultCard({ evaluation, reactionDelayMs, onReset }: ResultCardProps) {
+  if (!evaluation) {
     return null;
   }
 
   return (
-    <section className="result-card">
-      <div className="result-header">
-        <h3>Round result</h3>
-        {evaluation && <span className={`decision-pill decision-${evaluation.decision}`}>{evaluation.decision}</span>}
+    <section className="analysis-card">
+      <div className="analysis-topline">
+        <span className="analysis-label">llm meaning analysis</span>
+        <span className={`analysis-pill decision-${evaluation.decision}`}>{evaluation.decision}</span>
       </div>
 
-      <div className="result-grid">
-        <div>
-          <p className="panel-label">Captain source (Vietnamese)</p>
-          <p>{captainTranscript?.transcript || '—'}</p>
-        </div>
-        <div>
-          <p className="panel-label">Crew response (English)</p>
-          <p>{crewTranscript?.transcript || '—'}</p>
-        </div>
+      <div className="analysis-score-block">
+        <div className="analysis-score">{evaluation.matchScore}</div>
+        <div className="analysis-caption">meaning match</div>
       </div>
 
-      <div className="score-row">
+      <div className="analysis-metrics">
         <div>
-          <p className="panel-label">Meaning score</p>
-          <p className="score-value">{evaluation?.matchScore ?? 0}</p>
+          <span className="metric-label">response delay</span>
+          <span className="metric-value">{reactionDelayMs != null ? `${(reactionDelayMs / 1000).toFixed(2)}s` : '—'}</span>
         </div>
         <div>
-          <p className="panel-label">Reaction delay</p>
-          <p>{reactionDelayMs != null ? `${(reactionDelayMs / 1000).toFixed(2)}s` : '—'}</p>
+          <span className="metric-label">feedback mode</span>
+          <span className="metric-value">{evaluation.feedbackType || 'off'}</span>
         </div>
       </div>
 
-      {evaluation?.reason && (
-        <div>
-          <p className="panel-label">Reason</p>
-          <p>{evaluation.reason}</p>
+      <div className="analysis-detail-block">
+        <span className="metric-label">summary</span>
+        <p className="analysis-reason">{evaluation.reason}</p>
+      </div>
+
+      <div className="analysis-grid-two-up">
+        <DetailList title="missing meaning" items={evaluation.missingConcepts} />
+        <DetailList title="extra meaning" items={evaluation.extraConcepts} />
+      </div>
+
+      {(evaluation.grammarNote || evaluation.improvedTranscript) && (
+        <div className="analysis-grid-two-up">
+          {evaluation.grammarNote && (
+            <div className="analysis-detail-block">
+              <span className="metric-label">clarity note</span>
+              <p className="analysis-reason">{evaluation.grammarNote}</p>
+            </div>
+          )}
+          {evaluation.improvedTranscript && (
+            <div className="analysis-detail-block">
+              <span className="metric-label">suggested English</span>
+              <p className="analysis-reason">{evaluation.improvedTranscript}</p>
+            </div>
+          )}
         </div>
       )}
+
+      <button type="button" className="primary-pill-button" onClick={onReset}>
+        Play again
+      </button>
     </section>
   );
 }

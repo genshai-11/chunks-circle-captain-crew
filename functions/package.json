@@ -3,7 +3,7 @@
   "private": true,
   "main": "index.js",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "scripts": {
     "lint": "echo no-lint",
@@ -11,7 +11,7 @@
     "deploy": "firebase deploy --only functions"
   },
   "dependencies": {
-    "firebase-admin": "^12.7.0",
-    "firebase-functions": "^6.0.1"
+    "firebase-admin": "^13.7.0",
+    "firebase-functions": "^7.2.2"
   }
 }

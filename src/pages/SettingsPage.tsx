@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAdminAuth } from '@/auth/AdminAuthContext';
 import { defaultGameSettings, loadSettings, saveSettings } from '@/services/roundRepository';
 import { GameSettings } from '@/types';
 
 export default function SettingsPage() {
+  const { isAdmin } = useAdminAuth();
   const [settings, setSettings] = useState<GameSettings>(defaultGameSettings);
   const [saved, setSaved] = useState(false);
 
@@ -17,17 +20,17 @@ export default function SettingsPage() {
   };
 
   return (
-    <main className="screen-shell settings-shell">
-      <header className="topbar">
+    <main className="screen-shell admin-shell">
+      <header className="page-header">
         <div>
-          <p className="eyebrow">Game settings</p>
-          <h1>Timing & Meaning</h1>
+          <p className="page-kicker">Settings</p>
+          <h1 className="page-title">Timing</h1>
         </div>
       </header>
 
-      <section className="settings-card">
-        <label>
-          <span>Max Crew start delay (ms)</span>
+      <section className="soft-card admin-section-minimal">
+        <label className="field-stack">
+          <span>Max crew start delay (ms)</span>
           <input
             type="number"
             value={settings.maxCrewStartDelayMs}
@@ -35,8 +38,8 @@ export default function SettingsPage() {
           />
         </label>
 
-        <label>
-          <span>Meaning strictness</span>
+        <label className="field-stack">
+          <span>Meaning strictness fallback</span>
           <select
             value={settings.strictness}
             onChange={(e) => setSettings((prev) => ({ ...prev, strictness: e.target.value as GameSettings['strictness'] }))}
@@ -47,17 +50,24 @@ export default function SettingsPage() {
           </select>
         </label>
 
-        <label className="checkbox-row">
+        <label className="toggle-row">
           <input
             type="checkbox"
             checked={settings.showCountdown}
             onChange={(e) => setSettings((prev) => ({ ...prev, showCountdown: e.target.checked }))}
           />
-          <span>Show countdown during Crew waiting phase</span>
+          Show countdown during crew waiting phase
         </label>
 
-        <button className="big-action-button" onClick={handleSave}>Save settings</button>
-        {saved && <p className="save-hint">Settings saved.</p>}
+        <div className="action-row">
+          <button className="primary-pill-button" onClick={handleSave}>Save settings</button>
+          {saved && <span className="save-pill">Saved</span>}
+          {isAdmin ? (
+            <span className="save-pill">Admin active</span>
+          ) : (
+            <Link to="/admin-login" className="ghost-pill-button admin-link-button">Admin sign in</Link>
+          )}
+        </div>
       </section>
     </main>
   );
