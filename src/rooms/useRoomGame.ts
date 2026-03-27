@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react';
-import { addDoc, collection, doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { addDoc, collection, doc, getDoc, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { evaluateCaptionCrewMeaning } from '@/services/meaningService';
 import { transcribeRoundAudio } from '@/services/transcriptionService';
 import { useRoundRecorder } from '@/hooks/useRoundRecorder';
+import { createRoomWithJoinCode } from './roomService';
 import type { RoomDoc, RoomRoundDoc } from './types';
 
 async function waitForCaptainTranscript(params: {
@@ -29,6 +30,8 @@ async function waitForCaptainTranscript(params: {
   return '';
 }
 
+const CREW_RESPONSE_TIMEOUT_MS = 15000;
+
 export function useRoomGame(params: {
   roomId: string;
   room: (RoomDoc & { id: string }) | null;
@@ -41,6 +44,7 @@ export function useRoomGame(params: {
   const crewRecorder = useRoundRecorder();
 
   const [processing, setProcessing] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const currentRound = rounds.length ? rounds[rounds.length - 1] : null;
   const isCaptain = !!user?.uid && room?.captainId === user.uid;
@@ -49,6 +53,61 @@ export function useRoomGame(params: {
   const canStartRound = Boolean(user?.uid && isCaptain);
   const canStartCaptain = Boolean(currentRound && currentRound.status === 'captain_speaking' && isCaptain && !processing);
   const canStartCrew = Boolean(currentRound && currentRound.status === 'crew_speaking' && isCrew && !processing);
+
+  const crewDeadlineAtMs = useMemo(() => {
+    if (!currentRound) return null;
+    if (typeof currentRound.crewDeadlineAtMs === 'number') return currentRound.crewDeadlineAtMs;
+    if (typeof currentRound.captainStoppedAtMs === 'number') return currentRound.captainStoppedAtMs + CREW_RESPONSE_TIMEOUT_MS;
+    return null;
+  }, [currentRound]);
+
+  const crewRemainingMs = useMemo(() => {
+    if (!crewDeadlineAtMs) return null;
+    if (currentRound?.crewStartedAtMs) return 0;
+    return Math.max(0, crewDeadlineAtMs - nowMs);
+  }, [crewDeadlineAtMs, currentRound?.crewStartedAtMs, nowMs]);
+
+  const crewCountdownLabel = useMemo(() => {
+    if (!crewDeadlineAtMs) return undefined;
+    if (currentRound?.status !== 'crew_speaking') return undefined;
+    if (currentRound?.crewStartedAtMs) return undefined;
+    const s = Math.ceil((crewRemainingMs ?? 0) / 1000);
+    return `Remaining: ${String(s).padStart(2, '0')}s`;
+  }, [crewDeadlineAtMs, crewRemainingMs, currentRound?.status, currentRound?.crewStartedAtMs]);
+
+  useEffect(() => {
+    if (!crewDeadlineAtMs) return;
+    if (!currentRound || currentRound.status !== 'crew_speaking') return;
+    if (currentRound.crewStartedAtMs) return;
+
+    const t = window.setInterval(() => setNowMs(Date.now()), 250);
+    return () => window.clearInterval(t);
+  }, [crewDeadlineAtMs, currentRound?.status, currentRound?.crewStartedAtMs]);
+
+  useEffect(() => {
+    if (!db) return;
+    if (!isCaptain) return;
+    if (!currentRound || currentRound.status !== 'crew_speaking') return;
+    if (!crewDeadlineAtMs) return;
+    if (currentRound.crewStartedAtMs) return;
+    if ((crewRemainingMs ?? 1) > 0) return;
+
+    const roundRef = doc(db, 'rooms', roomId, 'rounds', currentRound.id);
+    void runTransaction(db, async (tx) => {
+      const snap = await tx.get(roundRef);
+      if (!snap.exists()) return;
+      const data = snap.data() as any;
+      if (data.status !== 'crew_speaking') return;
+      if (data.crewStartedAtMs) return;
+
+      tx.update(roundRef, {
+        status: 'finished',
+        winnerRole: 'captain',
+        endReason: 'crew_timeout',
+        crewDeadlineAtMs: crewDeadlineAtMs,
+      });
+    });
+  }, [crewDeadlineAtMs, crewRemainingMs, currentRound?.crewStartedAtMs, currentRound?.id, currentRound?.status, isCaptain, roomId]);
 
   const joinRole = useCallback(
     async (role: 'captain' | 'crew') => {
@@ -65,20 +124,9 @@ export function useRoomGame(params: {
   );
 
   const createRoom = useCallback(async () => {
-    if (!db) throw new Error('Firestore not configured');
     if (!user?.uid) throw new Error('Please sign in first');
-
-    const roomsRef = collection(db, 'rooms');
-    const docRef = await addDoc(roomsRef, {
-      hostId: user.uid,
-      captainId: null,
-      crewId: null,
-      status: 'waiting',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    } satisfies RoomDoc);
-
-    return docRef.id;
+    const { roomId } = await createRoomWithJoinCode(user.uid);
+    return roomId;
   }, [user?.uid]);
 
   const startRound = useCallback(async () => {
@@ -121,6 +169,7 @@ export function useRoomGame(params: {
     await updateDoc(roundRef, {
       status: 'crew_speaking',
       captainStoppedAtMs: stoppedAtMs,
+      crewDeadlineAtMs: stoppedAtMs + CREW_RESPONSE_TIMEOUT_MS,
     });
 
     // Background STT
@@ -212,6 +261,8 @@ export function useRoomGame(params: {
     canStartRound,
     canStartCaptain,
     canStartCrew,
+    crewCountdownLabel,
+    crewRemainingMs,
     createRoom,
     joinRole,
     startRound,

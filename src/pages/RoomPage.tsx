@@ -36,6 +36,12 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
     await navigator.clipboard.writeText(`${window.location.origin}/room/${roomId}`);
   };
 
+  const copyCode = async () => {
+    if (!room) return;
+    const code = String(room.joinCode || roomId.slice(0, 6)).toUpperCase();
+    await navigator.clipboard.writeText(code);
+  };
+
   const startNewRound = async () => {
     await game.startRound();
   };
@@ -77,11 +83,13 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
           <img src="/chunks-logo.png" alt="Chunks" className="chunks-logo" />
           <div>
             <p className="game-kicker">Room</p>
-            <h1 className="game-title">{roomId.slice(0, 6)}</h1>
+            <h1 className="game-title">{String(room.joinCode || roomId.slice(0, 6)).toUpperCase()}</h1>
+            <p className="muted-copy" style={{ marginTop: 4, marginBottom: 0 }}>Code: {String(room.joinCode || roomId.slice(0, 6)).toUpperCase()}</p>
           </div>
         </div>
         <div className="action-row">
           <button type="button" className="ghost-pill-button" onClick={() => void copyInvite()}>Copy invite</button>
+          <button type="button" className="ghost-pill-button" onClick={() => void copyCode()}>Copy code</button>
           <button type="button" className="ghost-pill-button" onClick={onLeave}>Leave</button>
         </div>
       </div>
@@ -101,6 +109,12 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
             <section className="soft-card admin-section-minimal">
               {evaluation && (
                 <ResultCard evaluation={evaluation} reactionDelayMs={currentRound?.reactionDelayMs || null} onReset={() => void startNewRound()} />
+              )}
+
+              {!evaluation && currentRound?.status === 'finished' && currentRound?.endReason === 'crew_timeout' && (
+                <p className="game-error" style={{ marginTop: 0 }}>
+                  Crew did not start in time. {game.isCaptain ? 'Captain wins.' : 'Game over.'}
+                </p>
               )}
               <div className="action-row" style={{ marginTop: 12 }}>
                 {game.isCaptain ? (
@@ -123,6 +137,7 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
                 active={currentRound.status === 'captain_speaking'}
                 disabled={!game.canStartCaptain}
                 processing={game.processing && game.isCaptain}
+                countdownLabel={currentRound.status === 'crew_speaking' ? game.crewCountdownLabel : undefined}
                 helperText={currentRound.status === 'captain_speaking' ? 'Speak Vietnamese' : 'Wait'}
                 levels={game.captainRecorder.levels}
                 onStart={() => void game.startCaptain()}
@@ -137,6 +152,7 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
                 active={currentRound.status === 'crew_speaking' || currentRound.status === 'evaluating'}
                 disabled={!game.canStartCrew}
                 processing={game.processing && game.isCrew}
+                countdownLabel={game.crewCountdownLabel}
                 helperText={currentRound.status === 'crew_speaking' ? 'Reply in English' : 'Wait'}
                 levels={game.crewRecorder.levels}
                 onStart={() => void game.startCrew()}

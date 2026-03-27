@@ -1,34 +1,41 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { usePlayerAuth } from '@/auth/PlayerAuth';
+import { createRoomWithJoinCode, resolveJoinCode } from '@/rooms/roomService';
 
 export default function LobbyPage() {
   const navigate = useNavigate();
   const { user, signOutPlayer } = usePlayerAuth();
 
   const [roomCode, setRoomCode] = useState('');
+  const [joinError, setJoinError] = useState('');
 
-  const canUseDb = useMemo(() => Boolean(db && user?.uid), [user?.uid]);
+  const canUseDb = useMemo(() => Boolean(user?.uid), [user?.uid]);
 
   const createRoom = async () => {
-    if (!db || !user?.uid) return;
+    if (!user?.uid) return;
 
-    const ref = await addDoc(collection(db, 'rooms'), {
-      hostId: user.uid,
-      status: 'waiting',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    navigate(`/room/${ref.id}`);
+    const { roomId } = await createRoomWithJoinCode(user.uid);
+    navigate(`/room/${roomId}`);
   };
 
-  const joinRoom = () => {
+  const joinRoom = async () => {
+    setJoinError('');
     const code = roomCode.trim();
     if (!code) return;
-    navigate(`/room/${code}`);
+
+    // If user pasted a full roomId, allow it.
+    if (code.length >= 12) {
+      navigate(`/room/${code}`);
+      return;
+    }
+
+    try {
+      const { roomId } = await resolveJoinCode(code);
+      navigate(`/room/${roomId}`);
+    } catch (error: any) {
+      setJoinError(error?.message || 'Could not join room.');
+    }
   };
 
   return (
@@ -56,11 +63,12 @@ export default function LobbyPage() {
         <div className="field-stack" style={{ marginTop: 16 }}>
           <label>Join by room code</label>
           <div className="action-row">
-            <input value={roomCode} onChange={(e) => setRoomCode(e.target.value)} placeholder="Paste room id" />
-            <button type="button" className="primary-pill-button" onClick={joinRoom}>
+            <input value={roomCode} onChange={(e) => setRoomCode(e.target.value)} placeholder="Enter 6-char code (e.g., JBQ9KC) or paste full room id" />
+            <button type="button" className="primary-pill-button" onClick={() => void joinRoom()}>
               Join
             </button>
           </div>
+          {joinError && <p className="game-error" style={{ marginTop: 8 }}>{joinError}</p>}
         </div>
       </section>
 

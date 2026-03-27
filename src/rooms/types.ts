@@ -5,8 +5,9 @@ export type RoundStatus = 'captain_speaking' | 'crew_speaking' | 'evaluating' | 
 
 export interface RoomDoc {
   hostId: string;
-  captainId?: string;
-  crewId?: string;
+  captainId?: string | null;
+  crewId?: string | null;
+  joinCode?: string;
   status: RoomStatus;
   createdAt: any;
   updatedAt: any;
@@ -20,6 +21,11 @@ export interface RoomRoundDoc {
 
   captainStoppedAtMs?: number;
   crewStartedAtMs?: number;
+
+  // Optional timeout metadata
+  crewDeadlineAtMs?: number;
+  winnerRole?: 'captain' | 'crew' | 'none';
+  endReason?: 'meaning' | 'crew_timeout' | 'manual';
 
   captainTranscript?: string;
   crewTranscript?: string;

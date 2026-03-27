@@ -56,6 +56,17 @@ service cloud.firestore {
       allow read, write: if isAdminEmail();
     }
 
+    // Mapping from short join code -> roomId
+    match /room_codes/{code} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasAll(['roomId', 'hostId', 'createdAt'])
+        && request.resource.data.hostId == request.auth.uid
+        && request.resource.data.roomId is string;
+      allow update, delete: if false;
+    }
+
     match /rooms/{roomId} {
       // Host creates a room.
       allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
