@@ -8,6 +8,7 @@ import AnalysisSummaryPage from '@/pages/AnalysisSummaryPage';
 import HistoryPage from '@/pages/HistoryPage';
 import LobbyPage from '@/pages/LobbyPage';
 import RoomPage from '@/pages/RoomPage';
+import { RequirePlayer } from '@/auth/PlayerAuth';
 import SettingsPage from '@/pages/SettingsPage';
 import { defaultAdminRuntimeConfig, loadCachedVisualTheme, loadPublicVisualTheme } from '@/services/adminConfigRepository';
 import type { VisualTheme } from '@/types';
@@ -42,7 +43,7 @@ function AppShell() {
   return (
     <div className={`app-shell theme-${visualTheme}`}>
       <Routes>
-        <Route path="/" element={<LobbyPage />} />
+        <Route path="/" element={<RequirePlayer><LobbyPage /></RequirePlayer>} />
         <Route path="/room/:roomId" element={<RoomPage />} />
         <Route path="/summary" element={<AnalysisSummaryPage />} />
         <Route path="/history" element={<HistoryPage />} />

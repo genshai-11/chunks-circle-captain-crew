@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { usePlayerAuth } from '@/auth/PlayerAuth';
 
@@ -25,13 +25,18 @@ export default function LobbyPage() {
   useEffect(() => {
     if (!db || !canUseDb) return;
 
-    const q = query(collection(db, 'rooms'), orderBy('createdAt', 'desc'), limit(12));
+    const q = query(
+      collection(db, 'rooms'),
+      where('hostId', '==', user!.uid),
+      orderBy('createdAt', 'desc'),
+      limit(12)
+    );
     const unsub = onSnapshot(q, (snap) => {
       setRooms(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
     });
 
     return () => unsub();
-  }, [canUseDb]);
+  }, [canUseDb, user?.uid]);
 
   const createRoom = async () => {
     if (!db || !user?.uid) return;
