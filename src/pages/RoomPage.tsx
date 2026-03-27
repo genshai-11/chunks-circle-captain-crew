@@ -23,7 +23,7 @@ export default function RoomPage() {
 }
 
 function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string; onLeave: () => void }) {
-  const { room, rounds, loading } = useRoom(roomId);
+  const { room, rounds, loading } = useRoom(roomId, userId);
   const game = useRoomGame({ roomId, room, rounds });
 
   const currentRound = game.currentRound;
