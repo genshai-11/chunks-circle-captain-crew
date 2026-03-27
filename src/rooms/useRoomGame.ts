@@ -71,6 +71,8 @@ export function useRoomGame(params: {
     const roomsRef = collection(db, 'rooms');
     const docRef = await addDoc(roomsRef, {
       hostId: user.uid,
+      captainId: null,
+      crewId: null,
       status: 'waiting',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),

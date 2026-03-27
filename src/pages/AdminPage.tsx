@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { collection, onSnapshot, orderBy, query, limit } from 'firebase/firestore';
 import { useAdminAuth } from '@/auth/AdminAuthContext';
+import { db } from '@/lib/firebase';
 import {
   AdminRuntimeConfig,
   defaultAdminRuntimeConfig,
@@ -41,6 +43,10 @@ export default function AdminPage() {
   const [captainTestState, setCaptainTestState] = useState<TestState>(idleTestState);
   const [crewTestState, setCrewTestState] = useState<TestState>(idleTestState);
 
+  const [roomsStatus, setRoomsStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  const [roomsMessage, setRoomsMessage] = useState('');
+  const [rooms, setRooms] = useState<Array<{ id: string; hostId?: string; captainId?: string | null; crewId?: string | null; status?: string; updatedAt?: any; createdAt?: any }>>([]);
+
   const captainRecorder = useRoundRecorder();
   const crewRecorder = useRoundRecorder();
 
@@ -68,6 +74,35 @@ export default function AdminPage() {
     return () => {
       cancelled = true;
     };
+  }, [user?.email]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    if (!db) {
+      setRoomsStatus('error');
+      setRoomsMessage('Firestore not configured.');
+      return;
+    }
+
+    setRoomsStatus('loading');
+    setRoomsMessage('Loading recent rooms…');
+
+    const q = query(collection(db, 'rooms'), orderBy('updatedAt', 'desc'), limit(30));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const next = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        setRooms(next);
+        setRoomsStatus('loaded');
+        setRoomsMessage(`${next.length} room(s) loaded.`);
+      },
+      (err) => {
+        setRoomsStatus('error');
+        setRoomsMessage(err?.message || 'Failed to load rooms.');
+      }
+    );
+
+    return () => unsub();
   }, [user?.email]);
 
   const patchConfig = <K extends keyof AdminRuntimeConfig>(key: K, value: AdminRuntimeConfig[K]) => {
@@ -210,6 +245,7 @@ export default function AdminPage() {
             <select value={config.visualTheme} onChange={(e) => patchConfig('visualTheme', e.target.value as AdminRuntimeConfig['visualTheme'])}>
               <option value="minimal">Minimal</option>
               <option value="bold">Bold</option>
+              <option value="swiss">Swiss Typographic</option>
             </select>
           </label>
           <div className="field-stack">
@@ -342,6 +378,43 @@ export default function AdminPage() {
           <StatusBadge label={routerTestState.status === 'success' ? 'pass' : routerTestState.status === 'error' ? 'fail' : 'pending'} status={routerTestState.status === 'success' ? 'success' : routerTestState.status === 'error' ? 'error' : 'idle'} />
         </div>
         <p className="admin-message">{routerTestState.message}</p>
+      </section>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">Rooms debugger</h2>
+        </div>
+        <div className="action-row">
+          <span className="soft-label">Rooms</span>
+          <StatusBadge label={roomsStatus} status={roomsStatus === 'loaded' ? 'success' : roomsStatus === 'error' ? 'error' : roomsStatus === 'loading' ? 'loading' : 'idle'} />
+        </div>
+        <p className="admin-message">{roomsMessage || 'Shows the most recently updated rooms (admin-only list).'}</p>
+        {rooms.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="admin-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '8px 6px' }}>room</th>
+                  <th style={{ textAlign: 'left', padding: '8px 6px' }}>status</th>
+                  <th style={{ textAlign: 'left', padding: '8px 6px' }}>captain</th>
+                  <th style={{ textAlign: 'left', padding: '8px 6px' }}>crew</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rooms.map((r) => (
+                  <tr key={r.id}>
+                    <td style={{ padding: '8px 6px' }}>
+                      <a href={`/room/${r.id}`} className="ghost-link">{r.id.slice(0, 8)}…</a>
+                    </td>
+                    <td style={{ padding: '8px 6px' }}>{String(r.status || '')}</td>
+                    <td style={{ padding: '8px 6px' }}>{r.captainId ? String(r.captainId).slice(0, 8) + '…' : '-'}</td>
+                    <td style={{ padding: '8px 6px' }}>{r.crewId ? String(r.crewId).slice(0, 8) + '…' : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="soft-card admin-section-minimal">

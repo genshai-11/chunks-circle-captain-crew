@@ -9,11 +9,19 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.email in ['lucy2511kh@gmail.com', 'le.ntmkh@gmail.com'];
     }
 
+    function hasField(map, field) {
+      return map.keys().hasAny([field]);
+    }
+
+    function currentValue(map, field) {
+      return hasField(map, field) ? map[field] : null;
+    }
+
     function isParticipant(room) {
       return isSignedIn() && (
         room.hostId == request.auth.uid ||
-        room.captainId == request.auth.uid ||
-        room.crewId == request.auth.uid
+        currentValue(room, 'captainId') == request.auth.uid ||
+        currentValue(room, 'crewId') == request.auth.uid
       );
     }
 
@@ -21,26 +29,27 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).changedKeys();
     }
 
+    // Non-participants can claim roles while waiting.
     function isClaimingCaptain(room) {
       return isSignedIn()
         && room.status == 'waiting'
-        && room.captainId == null
+        && currentValue(room, 'captainId') == null
         && changedKeys().hasOnly(['captainId', 'updatedAt'])
         && request.resource.data.captainId == request.auth.uid
-        && request.resource.data.crewId == room.crewId
         && request.resource.data.hostId == room.hostId
-        && request.resource.data.status == room.status;
+        && request.resource.data.status == room.status
+        && request.resource.data.createdAt == room.createdAt;
     }
 
     function isClaimingCrew(room) {
       return isSignedIn()
         && room.status == 'waiting'
-        && room.crewId == null
+        && currentValue(room, 'crewId') == null
         && changedKeys().hasOnly(['crewId', 'updatedAt'])
         && request.resource.data.crewId == request.auth.uid
-        && request.resource.data.captainId == room.captainId
         && request.resource.data.hostId == room.hostId
-        && request.resource.data.status == room.status;
+        && request.resource.data.status == room.status
+        && request.resource.data.createdAt == room.createdAt;
     }
 
     match /admin_runtime_config/{docId} {
@@ -51,9 +60,11 @@ service cloud.firestore {
       // Host creates a room.
       allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
 
-      // Let users open a waiting room by link to join it.
+      // Players can open a waiting room by link to join it.
       allow get: if isSignedIn() && (isParticipant(resource.data) || resource.data.status == 'waiting');
-      allow list: if false;
+
+      // No public listing. Admin can list to debug.
+      allow list: if isAdminEmail();
 
       // Participants can update.
       // Non-participants can only claim Captain/Crew while room is waiting.
