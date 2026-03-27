@@ -17,21 +17,30 @@ service cloud.firestore {
       );
     }
 
-    // Allow a non-participant to claim a role while the room is waiting.
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).changedKeys();
+    }
+
     function isClaimingCaptain(room) {
       return isSignedIn()
         && room.status == 'waiting'
-        && (room.captainId == null)
-        && request.writeFields.hasOnly(['captainId', 'updatedAt'])
-        && request.resource.data.captainId == request.auth.uid;
+        && room.captainId == null
+        && changedKeys().hasOnly(['captainId', 'updatedAt'])
+        && request.resource.data.captainId == request.auth.uid
+        && request.resource.data.crewId == room.crewId
+        && request.resource.data.hostId == room.hostId
+        && request.resource.data.status == room.status;
     }
 
     function isClaimingCrew(room) {
       return isSignedIn()
         && room.status == 'waiting'
-        && (room.crewId == null)
-        && request.writeFields.hasOnly(['crewId', 'updatedAt'])
-        && request.resource.data.crewId == request.auth.uid;
+        && room.crewId == null
+        && changedKeys().hasOnly(['crewId', 'updatedAt'])
+        && request.resource.data.crewId == request.auth.uid
+        && request.resource.data.captainId == room.captainId
+        && request.resource.data.hostId == room.hostId
+        && request.resource.data.status == room.status;
     }
 
     match /admin_runtime_config/{docId} {
@@ -39,17 +48,19 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId} {
+      // Host creates a room.
       allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
 
       // Let users open a waiting room by link to join it.
       allow get: if isSignedIn() && (isParticipant(resource.data) || resource.data.status == 'waiting');
       allow list: if false;
 
+      // Participants can update.
+      // Non-participants can only claim Captain/Crew while room is waiting.
       allow update: if isParticipant(resource.data) || isClaimingCaptain(resource.data) || isClaimingCrew(resource.data);
       allow delete: if false;
 
       match /rounds/{roundId} {
-        // Only participants can access rounds.
         allow create, get, list, update: if isParticipant(get(/databases/$(database)/documents/rooms/$(roomId)).data);
         allow delete: if false;
       }
