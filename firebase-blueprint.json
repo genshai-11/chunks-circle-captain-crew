@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "player"] },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["uid", "role", "createdAt"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "A game room for Captain and Crew",
+      "type": "object",
+      "properties": {
+        "hostId": { "type": "string" },
+        "captainId": { "type": "string" },
+        "crewId": { "type": "string" },
+        "status": { "type": "string", "enum": ["waiting", "playing", "finished"] },
+        "createdAt": { "type": "timestamp" },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["hostId", "status", "createdAt", "updatedAt"]
+    },
+    "Round": {
+      "title": "Round",
+      "description": "A single round in a game room",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string" },
+        "roundNumber": { "type": "number" },
+        "captainTranscript": { "type": "string" },
+        "crewTranscript": { "type": "string" },
+        "meaningScore": { "type": "number" },
+        "feedback": { "type": "string" },
+        "status": { "type": "string", "enum": ["captain_speaking", "crew_speaking", "evaluating", "finished"] },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["roomId", "roundNumber", "status", "createdAt"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "model": { "type": "string" },
+        "temperature": { "type": "number" },
+        "systemInstruction": { "type": "string" },
+        "apiUrl": { "type": "string" },
+        "apiKey": { "type": "string" }
+      },
+      "required": ["model"]
+    }
+  },
+  "firestore": {
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Settings" },
+      "description": "Stores global app settings"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles"
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Stores game rooms"
+    },
+    "/rooms/{roomId}/rounds/{roundId}": {
+      "schema": { "$ref": "#/entities/Round" },
+      "description": "Stores rounds for a specific room"
+    }
+  }
+}

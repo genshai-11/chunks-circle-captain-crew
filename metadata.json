@@ -1,0 +1,5 @@
+{
+  "name": "Caption & Crew",
+  "description": "A 2-player language learning game focusing on meaning transfer from Vietnamese to English.",
+  "requestFramePermissions": ["microphone"]
+}

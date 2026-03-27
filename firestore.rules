@@ -1,0 +1,172 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - User ID
+    //   - email: string (required) - User email
+    //   - displayName: string (optional) - User display name
+    //   - photoURL: string (optional) - User photo URL
+    //   - role: string (required) - 'admin' or 'player'
+    //   - createdAt: timestamp (required) - Creation timestamp
+    //
+    // Collection: rooms
+    // Document ID: {roomId}
+    // Fields:
+    //   - hostId: string (required) - User ID of the host
+    //   - captainId: string (optional) - User ID of the captain
+    //   - crewId: string (optional) - User ID of the crew
+    //   - status: string (required) - 'waiting', 'playing', 'finished'
+    //   - createdAt: timestamp (required) - Creation timestamp
+    //   - updatedAt: timestamp (required) - Last update timestamp
+    //
+    // Collection: rooms/{roomId}/rounds
+    // Document ID: {roundId}
+    // Fields:
+    //   - roomId: string (required) - ID of the room
+    //   - roundNumber: number (required) - Round number
+    //   - captainTranscript: string (optional) - Vietnamese transcript
+    //   - crewTranscript: string (optional) - English transcript
+    //   - meaningScore: number (optional) - Score from 0 to 100
+    //   - feedback: string (optional) - AI feedback
+    //   - status: string (required) - 'captain_speaking', 'crew_speaking', 'evaluating', 'finished'
+    //   - createdAt: timestamp (required) - Creation timestamp
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "le.ntmkh@gmail.com" && request.auth.token.email_verified == true) ||
+          (request.auth.token.email == "lucy2511kh@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    // Domain Validators
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             (!( 'email' in data ) || (data.email is string && (data.email == '' || isValidEmail(data.email)))) &&
+             isValidOptionalString('displayName', 0, 100) &&
+             isValidOptionalString('photoURL', 0, 2048) &&
+             data.role in ['admin', 'player'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidRoom(data) {
+      return hasOnlyAllowedFields(['hostId', 'captainId', 'crewId', 'status', 'createdAt', 'updatedAt']) &&
+             data.hostId is string && data.hostId.size() > 0 && data.hostId.size() < 100 &&
+             isValidOptionalString('captainId', 0, 100) &&
+             isValidOptionalString('crewId', 0, 100) &&
+             data.status in ['waiting', 'playing', 'finished'] &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidRound(data) {
+      return hasOnlyAllowedFields(['roomId', 'roundNumber', 'captainTranscript', 'crewTranscript', 'meaningScore', 'feedback', 'status', 'createdAt']) &&
+             data.roomId is string && data.roomId.size() > 0 && data.roomId.size() < 100 &&
+             data.roundNumber is number && data.roundNumber > 0 &&
+             isValidOptionalString('captainTranscript', 0, 5000) &&
+             isValidOptionalString('crewTranscript', 0, 5000) &&
+             (!( 'meaningScore' in data ) || (data.meaningScore is number && data.meaningScore >= 0 && data.meaningScore <= 100)) &&
+             isValidOptionalString('feedback', 0, 5000) &&
+             data.status in ['captain_speaking', 'crew_speaking', 'evaluating', 'finished'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidSettings(data) {
+      return hasOnlyAllowedFields(['model', 'temperature', 'systemInstruction', 'apiUrl', 'apiKey']) &&
+             data.model is string && data.model.size() > 0 && data.model.size() < 100 &&
+             (!( 'temperature' in data ) || (data.temperature is number && data.temperature >= 0 && data.temperature <= 2)) &&
+             isValidOptionalString('systemInstruction', 0, 5000) &&
+             isValidOptionalString('apiUrl', 0, 1000) &&
+             isValidOptionalString('apiKey', 0, 1000);
+    }
+
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() && isValidSettings(request.resource.data);
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) &&
+                    isOwner(userId) && uidUnchanged() &&
+                    ((request.resource.data.role == 'player') || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) &&
+                    isOwner(userId) && uidNotModified() &&
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    ((request.resource.data.role == resource.data.role) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidRoom(request.resource.data) &&
+                    request.resource.data.hostId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidRoom(request.resource.data) &&
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    (resource.data.hostId == request.auth.uid ||
+                     request.resource.data.captainId == request.auth.uid ||
+                     request.resource.data.crewId == request.auth.uid ||
+                     resource.data.captainId == request.auth.uid ||
+                     resource.data.crewId == request.auth.uid);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.hostId == request.auth.uid);
+
+      match /rounds/{roundId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && isValidRound(request.resource.data) &&
+                      request.resource.data.roomId == roomId;
+        allow update: if isAuthenticated() && isValidRound(request.resource.data) &&
+                      request.resource.data.roomId == resource.data.roomId &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isAdmin();
+      }
+    }
+  }
+}
