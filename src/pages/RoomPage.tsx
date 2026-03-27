@@ -132,6 +132,27 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
     await updateDoc(doc(db, 'rooms', roomId), { status: 'finished', updatedAt: serverTimestamp() });
   };
 
+  const showRolePick = !room?.captainId || !room?.crewId;
+  const isCaptain = !!room && room.captainId === userId;
+  const isCrew = !!room && room.crewId === userId;
+  const myName = isCaptain ? room?.captainName : isCrew ? room?.crewName : null;
+
+  const [nickname, setNickname] = useState<string>('');
+
+  useEffect(() => {
+    setNickname(String(myName || '').trim());
+  }, [myName]);
+
+  const saveNickname = async () => {
+    if (!db || !room) return;
+    const name = nickname.trim().slice(0, 40);
+    if (!name) return;
+    await updateDoc(doc(db, 'rooms', roomId), {
+      ...(isCaptain ? { captainName: name } : isCrew ? { crewName: name } : {}),
+      updatedAt: serverTimestamp(),
+    });
+  };
+
   if (loading) {
     return (
       <main className="screen-shell">
@@ -155,26 +176,6 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
     );
   }
 
-  const showRolePick = !room.captainId || !room.crewId;
-
-  const isCaptain = room.captainId === userId;
-  const isCrew = room.crewId === userId;
-  const myName = isCaptain ? room.captainName : isCrew ? room.crewName : null;
-  const [nickname, setNickname] = useState<string>(String(myName || '').trim());
-
-  useEffect(() => {
-    setNickname(String(myName || '').trim());
-  }, [myName]);
-
-  const saveNickname = async () => {
-    if (!db) return;
-    const name = nickname.trim().slice(0, 40);
-    if (!name) return;
-    await updateDoc(doc(db, 'rooms', roomId), {
-      ...(isCaptain ? { captainName: name } : isCrew ? { crewName: name } : {}),
-      updatedAt: serverTimestamp(),
-    });
-  };
 
   return (
     <main className="game-screen">
