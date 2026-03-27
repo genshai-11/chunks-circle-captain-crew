@@ -5,8 +5,9 @@ import { RequireAdmin } from '@/auth/RequireAdmin';
 import AdminPage from '@/pages/AdminPage';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import AnalysisSummaryPage from '@/pages/AnalysisSummaryPage';
-import GamePage from '@/pages/GamePage';
 import HistoryPage from '@/pages/HistoryPage';
+import LobbyPage from '@/pages/LobbyPage';
+import RoomPage from '@/pages/RoomPage';
 import SettingsPage from '@/pages/SettingsPage';
 import { defaultAdminRuntimeConfig, loadCachedVisualTheme, loadPublicVisualTheme } from '@/services/adminConfigRepository';
 import type { VisualTheme } from '@/types';
@@ -41,7 +42,8 @@ function AppShell() {
   return (
     <div className={`app-shell theme-${visualTheme}`}>
       <Routes>
-        <Route path="/" element={<GamePage />} />
+        <Route path="/" element={<LobbyPage />} />
+        <Route path="/room/:roomId" element={<RoomPage />} />
         <Route path="/summary" element={<AnalysisSummaryPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
@@ -56,7 +58,7 @@ function AppShell() {
         />
       </Routes>
       <nav className={`bottom-nav ${isAdmin ? 'bottom-nav-four' : 'bottom-nav-three'}`}>
-        <NavLink to="/">Game</NavLink>
+        <NavLink to="/">Rooms</NavLink>
         <NavLink to="/history">History</NavLink>
         <NavLink to="/settings">Settings</NavLink>
         {isAdmin && <NavLink to="/admin">Admin</NavLink>}
