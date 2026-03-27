@@ -17,22 +17,21 @@ service cloud.firestore {
       );
     }
 
+    // Allow a non-participant to claim a role while the room is waiting.
     function isClaimingCaptain(room) {
-      return room.status == 'waiting'
-        && room.captainId == null
-        && request.resource.data.hostId == room.hostId
-        && request.resource.data.status == room.status
-        && request.resource.data.captainId == request.auth.uid
-        && request.resource.data.crewId == room.crewId;
+      return isSignedIn()
+        && room.status == 'waiting'
+        && (room.captainId == null)
+        && request.writeFields.hasOnly(['captainId', 'updatedAt'])
+        && request.resource.data.captainId == request.auth.uid;
     }
 
     function isClaimingCrew(room) {
-      return room.status == 'waiting'
-        && room.crewId == null
-        && request.resource.data.hostId == room.hostId
-        && request.resource.data.status == room.status
-        && request.resource.data.crewId == request.auth.uid
-        && request.resource.data.captainId == room.captainId;
+      return isSignedIn()
+        && room.status == 'waiting'
+        && (room.crewId == null)
+        && request.writeFields.hasOnly(['crewId', 'updatedAt'])
+        && request.resource.data.crewId == request.auth.uid;
     }
 
     match /admin_runtime_config/{docId} {
@@ -40,19 +39,13 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId} {
-      // Host creates the room.
       allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
 
-      // IMPORTANT:
-      // - Allow opening a *waiting* room by link (GET) so a new player can claim a role.
-      // - Do NOT allow listing all rooms publicly.
+      // Let users open a waiting room by link to join it.
       allow get: if isSignedIn() && (isParticipant(resource.data) || resource.data.status == 'waiting');
       allow list: if false;
 
-      // Participants can update.
-      // Non-participants can only claim Captain/Crew once while room is waiting.
-      allow update: if isParticipant(resource.data) || (isSignedIn() && (isClaimingCaptain(resource.data) || isClaimingCrew(resource.data)));
-
+      allow update: if isParticipant(resource.data) || isClaimingCaptain(resource.data) || isClaimingCrew(resource.data);
       allow delete: if false;
 
       match /rounds/{roundId} {
