@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "gen-lang-client-0815518176"
+  },
+  "targets": {
+    "gen-lang-client-0815518176": {
+      "hosting": {
+        "chunks-circle": [
+          "chunks-circle"
+        ]
+      }
+    }
+  }
+}
