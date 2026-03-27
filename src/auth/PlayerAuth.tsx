@@ -1,5 +1,12 @@
 import { ReactNode, useEffect, useState } from 'react';
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import {
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInAnonymously,
+  signInWithPopup,
+  signOut,
+  User,
+} from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
 const provider = new GoogleAuthProvider();
@@ -24,16 +31,21 @@ export function usePlayerAuth() {
     await signInWithPopup(auth, provider);
   };
 
+  const signInGuest = async () => {
+    if (!auth) throw new Error('Firebase Auth is not configured');
+    await signInAnonymously(auth);
+  };
+
   const signOutPlayer = async () => {
     if (!auth) return;
     await signOut(auth);
   };
 
-  return { user, loading, signInGoogle, signOutPlayer };
+  return { user, loading, signInGoogle, signInGuest, signOutPlayer };
 }
 
 export function RequirePlayer({ children }: { children: ReactNode }) {
-  const { user, loading, signInGoogle } = usePlayerAuth();
+  const { user, loading, signInGoogle, signInGuest } = usePlayerAuth();
 
   if (loading) {
     return (
@@ -55,6 +67,9 @@ export function RequirePlayer({ children }: { children: ReactNode }) {
           <div className="action-row">
             <button type="button" className="primary-pill-button" onClick={() => void signInGoogle()}>
               Sign in with Google
+            </button>
+            <button type="button" className="ghost-pill-button" onClick={() => void signInGuest()}>
+              Continue as Guest
             </button>
           </div>
         </section>
