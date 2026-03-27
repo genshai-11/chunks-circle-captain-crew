@@ -42,7 +42,6 @@ exports.transcribeRoundAudio = onRequest(
     invoker: 'public',
     timeoutSeconds: 300,
     memory: '1GiB',
-    secrets: ['DEEPGRAM_API_KEY'],
   },
   async (req, res) => {
     try {
@@ -112,7 +111,6 @@ exports.evaluateCaptionCrewMeaning = onRequest(
     invoker: 'public',
     timeoutSeconds: 300,
     memory: '1GiB',
-    secrets: ['GEMINI_API_KEY'],
   },
   async (req, res) => {
     try {
